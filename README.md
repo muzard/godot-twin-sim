@@ -16,7 +16,8 @@ git lfs install
 ```
 
 `./dev setup` checks prerequisites, builds everything and runs all tests. The simulation and its tests
-need only the .NET SDK, not Godot.
+need only the .NET SDK, not Godot. [Docker](https://www.docker.com/) is needed only for `./dev docker-test`
+and the map preprocessing (`./dev prep`).
 
 Run the visual client: open `src/Twin.Client/project.godot` in Godot 4.7.2 .NET and press Play.
 Left click selects a unit, right click orders it to move, the mouse wheel zooms.
@@ -34,6 +35,10 @@ Run the simulation without graphics: `./dev run -- --seconds 60`.
 | `tests/Twin.Scenarios.Tests` | Behaviour tests of agents ("unit reaches X, Y, Z"). |
 | `tests/Twin.Sim.Tests` | Unit tests of pure logic (terrain, math, random). |
 | `tests/Twin.Architecture.Tests` | Architecture rules as tests. |
+| `tests/Twin.Acceptance.Tests` | Acceptance tests on real, preprocessed map data (Smoke test I). |
+| `scenarios/` | Scenario files and preprocessed map areas. |
+| `prep/` | Map preprocessing toolbox: Python + GDAL in Docker. |
+| `docker/` | Container for running the core tests (`./dev docker-test`). |
 | `tools/dev.cs`, `./dev` | Team command line. |
 | `.claude/` | AI harness: hooks, skills, reviewer subagent. |
 | `docs/adr/` | Architecture decision records: what we decided and why. |

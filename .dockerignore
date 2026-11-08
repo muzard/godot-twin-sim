@@ -1,0 +1,9 @@
+**/bin/
+**/obj/
+**/.godot/
+**/TestResults/
+.git/
+.claude/
+.vs/
+.idea/
+**/.DS_Store

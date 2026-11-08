@@ -1,0 +1,2 @@
+# Python packages for the map preprocessing container, exact versions only (ADR 0006).
+# GDAL and numpy come from the base image (prep/Dockerfile).

@@ -48,3 +48,19 @@ jobs:
         with:
           name: test-results-${{ matrix.os }}
           path: TestResults
+
+  # Smoke test I, acceptance criterion 4: the core suite is green in a Docker container with only the .NET SDK.
+  docker-test:
+    name: tests in docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Build test image
+        run: docker build --file docker/test.Dockerfile --tag twin-test .
+
+      - name: Run tests in container (limit 60 s)
+        timeout-minutes: 1
+        run: docker run --rm twin-test
