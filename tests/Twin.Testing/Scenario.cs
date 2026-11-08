@@ -1,5 +1,7 @@
 using Twin.Sim;
+using Twin.Sim.Command;
 using Twin.Sim.Geometry;
+using Twin.Sim.Movement;
 using Twin.Sim.Terrain;
 
 namespace Twin.Testing;
@@ -18,7 +20,7 @@ public sealed class Scenario
     /// <summary>Default ground speed for test units: brisk infantry pace.</summary>
     public const double DefaultSpeedMps = 5.0;
 
-    private readonly List<(string Id, Vec2 At, double SpeedMps)> _units = [];
+    private readonly List<(string Id, Vec2 At, double SpeedMps, MovementProfile? Profile)> _units = [];
     private ITerrain _terrain = TestTerrain.Flat(1000);
     private SimulationConfig _config = new();
 
@@ -39,7 +41,38 @@ public sealed class Scenario
     /// <summary>Adds a ground unit.</summary>
     public Scenario WithUnit(string id, Vec2 at, double speedMps = DefaultSpeedMps)
     {
-        _units.Add((id, at, speedMps));
+        _units.Add((id, at, speedMps, null));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds an agent that moves by a movement profile: terrain-dependent speeds, slope limit and eye height.
+    /// Use <see cref="SpecV01.Infantry"/> for spec v0.1 infantry.
+    /// </summary>
+    public Scenario WithUnit(string id, Vec2 at, MovementProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        _units.Add((id, at, 0, profile));
+        return this;
+    }
+
+    /// <summary>
+    /// Adds the scripted leader who answers permission requests: after <paramref name="after"/> of simulated time it
+    /// grants, denies or never answers. A permit is valid within <paramref name="permitRadiusMeters"/> of the requested point.
+    /// </summary>
+    public Scenario WithLeader(LeaderAnswer answer, TimeSpan after, double permitRadiusMeters)
+    {
+        _config = _config with { Leader = new ScriptedLeader(answer, after.TotalSeconds, permitRadiusMeters) };
+        return this;
+    }
+
+    /// <summary>
+    /// Sets when an agent asks for permission (the respecting route costs more than <paramref name="threshold"/> times
+    /// the reference route) and how long it waits for an answer.
+    /// </summary>
+    public Scenario WithPermissionRules(double threshold, TimeSpan timeout)
+    {
+        _config = _config with { Permission = new PermissionRules(threshold, timeout.TotalSeconds) };
         return this;
     }
 
@@ -61,9 +94,16 @@ public sealed class Scenario
     public ScenarioRun Build()
     {
         var simulation = new Simulation(_terrain, _config);
-        foreach (var (id, at, speed) in _units)
+        foreach (var (id, at, speed, profile) in _units)
         {
-            simulation.AddUnit(id, at, speed);
+            if (profile is null)
+            {
+                simulation.AddUnit(id, at, speed);
+            }
+            else
+            {
+                simulation.AddUnit(id, at, profile);
+            }
         }
 
         return new ScenarioRun(simulation);

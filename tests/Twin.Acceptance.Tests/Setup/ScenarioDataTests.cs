@@ -1,6 +1,6 @@
 using Twin.Testing;
 
-namespace Twin.Acceptance.Tests.Environment;
+namespace Twin.Acceptance.Tests.Setup;
 
 /// <summary>
 /// Checks the plumbing the Smoke test I acceptance tests rely on: the test run can see the repository's

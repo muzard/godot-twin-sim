@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "crs": "EPSG:3067",
+  "origin": {
+    "easting": 403400.0,
+    "northing": 6686600.0
+  },
+  "cellSize": 2.0,
+  "width": 500,
+  "height": 500,
+  "layers": [
+    {
+      "name": "h_maa",
+      "type": "float32",
+      "file": "h_maa.bin",
+      "sha256": "135a1fa1512898043116bdf7e2022e0c4c3cd8e5d13cdd3d1245bd320e8a7a89"
+    },
+    {
+      "name": "maastoluokka",
+      "type": "uint8",
+      "file": "maastoluokka.bin",
+      "sha256": "3567a1b0b4f9feba26b80e76052ce4a8730d9590e71313d625c398d9859235e9"
+    }
+  ],
+  "sources": [
+    {
+      "name": "MML Korkeusmalli 2 m",
+      "file": "korkeusmalli_2m.tif",
+      "date": "2026-11-08"
+    },
+    {
+      "name": "MML Maastotietokanta",
+      "file": "maastotietokanta_kaikki.gpkg",
+      "date": "2026-11-08"
+    }
+  ],
+  "cliffs": {
+    "file": "jyrkanteet.json",
+    "sha256": "786f188aea89fb4734bcfa759c9eae906e47f320e67667e36c623a404f297206"
+  }
+}

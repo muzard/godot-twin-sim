@@ -1,4 +1,6 @@
 using Twin.Sim;
+using Twin.Sim.Events;
+using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
 using Twin.Sim.Terrain;
 using Twin.Sim.Units;
@@ -11,7 +13,13 @@ namespace Twin.Testing;
 /// </summary>
 public sealed class ScenarioRun
 {
-    internal ScenarioRun(Simulation simulation) => Simulation = simulation;
+    private readonly SortedDictionary<string, List<Vec2>> _trails = new(StringComparer.Ordinal);
+
+    internal ScenarioRun(Simulation simulation)
+    {
+        Simulation = simulation;
+        RecordTrails();
+    }
 
     /// <summary>The underlying simulation, for checks the kit does not cover yet.</summary>
     public Simulation Simulation { get; }
@@ -21,6 +29,15 @@ public sealed class ScenarioRun
 
     /// <summary>Simulated seconds elapsed.</summary>
     public double TimeSeconds => Simulation.TimeSeconds;
+
+    /// <summary>Every event the simulation has logged so far, in order (the event log).</summary>
+    public IReadOnlyList<SimEvent> Events => Simulation.EventLog;
+
+    /// <summary>
+    /// A unit's horizontal position when the run was built and after every tick since: the route it actually took.
+    /// </summary>
+    public IReadOnlyList<Vec2> Trail(string unitId) =>
+        _trails.TryGetValue(unitId, out var trail) ? trail : throw new KeyNotFoundException($"No unit with id '{unitId}'.");
 
     /// <summary>Looks up a unit.</summary>
     public Unit Unit(string id) => Simulation.GetUnit(id);
@@ -39,6 +56,7 @@ public sealed class ScenarioRun
         for (var i = 0; i < ticks; i++)
         {
             Simulation.Step();
+            RecordTrails();
         }
 
         return this;
@@ -60,6 +78,7 @@ public sealed class ScenarioRun
         for (long i = 0; i < maxTicks; i++)
         {
             Simulation.Step();
+            RecordTrails();
             if (condition(this))
             {
                 return this;
@@ -69,6 +88,20 @@ public sealed class ScenarioRun
         throw new ScenarioAssertionException(
             $"Condition {(description is null ? string.Empty : $"'{description}' ")}was not met within {timeout.TotalSeconds:0.##} s " +
             $"of simulated time (tick {Simulation.Tick}).{Environment.NewLine}{Describe()}");
+    }
+
+    private void RecordTrails()
+    {
+        foreach (var unit in Simulation.Units)
+        {
+            if (!_trails.TryGetValue(unit.Id, out var trail))
+            {
+                trail = [];
+                _trails.Add(unit.Id, trail);
+            }
+
+            trail.Add(unit.Position.Xy);
+        }
     }
 
     /// <summary>Every unit's state as text. Included in failure messages.</summary>
