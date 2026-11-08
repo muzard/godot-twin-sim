@@ -1,3 +1,4 @@
+using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Geometry;
 using Twin.Sim.Units;
@@ -70,11 +71,65 @@ public sealed record Arrived(double Time, string AgentId, Vec2 Position) : SimEv
 /// <param name="Reason">Why, in words.</param>
 public sealed record Blocked(double Time, string AgentId, string Reason) : SimEvent(Time, AgentId);
 
+/// <summary>An agent fired a shot.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The shooter.</param>
+/// <param name="TargetId">The agent it shot at.</param>
+/// <param name="Hit">True if the shot hit.</param>
+public sealed record ShotFired(double Time, string AgentId, string TargetId, bool Hit) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// An agent heard a shot. The event records where the shooter was; v0.1 agents do not yet act on it (only on what
+/// they see).
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The listener.</param>
+/// <param name="ShooterId">The shooter.</param>
+/// <param name="ShooterPosition">Where the shooter was.</param>
+public sealed record ShotHeard(double Time, string AgentId, string ShooterId, Vec2 ShooterPosition) : SimEvent(Time, AgentId);
+
+/// <summary>An agent's health changed.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Health">The new health.</param>
+public sealed record HealthChanged(double Time, string AgentId, Health Health) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// A hit wounded an agent or put it out of action: the hook for casualty care, which is not implemented yet.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The casualty.</param>
+/// <param name="Position">Where it lies.</param>
+/// <param name="Health">Its health after the hit.</param>
+public sealed record CasualtyOccurred(double Time, string AgentId, Vec2 Position, Health Health) : SimEvent(Time, AgentId);
+
+/// <summary>A shot at an agent suppressed it, or extended its suppression.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Until">When the suppression ends unless extended.</param>
+public sealed record SuppressionStarted(double Time, string AgentId, double Until) : SimEvent(Time, AgentId);
+
+/// <summary>An agent is no longer suppressed.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+public sealed record SuppressionEnded(double Time, string AgentId) : SimEvent(Time, AgentId);
+
+/// <summary>An agent's posture changed.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Posture">The new posture.</param>
+public sealed record PostureChanged(double Time, string AgentId, Posture Posture) : SimEvent(Time, AgentId);
+
 /// <summary>One agent in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The agent.</param>
 /// <param name="Position">Its position.</param>
 /// <param name="Activity">What it is doing.</param>
-public readonly record struct AgentSnapshot(string Id, Vec3 Position, UnitActivity Activity);
+/// <param name="Health">Its health.</param>
+/// <param name="Posture">Its posture.</param>
+/// <param name="Suppressed">True while it is suppressed.</param>
+public readonly record struct AgentSnapshot(
+    string Id, Vec3 Position, UnitActivity Activity, Health Health = Health.Unhurt, Posture Posture = Posture.Standing,
+    bool Suppressed = false);
 
 /// <summary>The state viewers show: every agent at one moment, ordered by id.</summary>
 /// <param name="TimeSeconds">Simulated time.</param>

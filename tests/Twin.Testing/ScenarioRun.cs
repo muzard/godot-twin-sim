@@ -90,6 +90,16 @@ public sealed class ScenarioRun
             $"of simulated time (tick {Simulation.Tick}).{Environment.NewLine}{Describe()}");
     }
 
+    /// <summary>
+    /// Runs until a shot hits <paramref name="targetId"/> (a <see cref="ShotFired"/> with <c>Hit</c> true), checking after
+    /// every tick, and returns that shot. Fails with a diagnostic if no hit comes within simulated <paramref name="timeout"/>.
+    /// </summary>
+    public ShotFired RunUntilHit(string targetId, TimeSpan timeout)
+    {
+        RunUntil(s => s.Events.OfType<ShotFired>().Any(e => e.TargetId == targetId && e.Hit), timeout, $"{targetId} hit");
+        return Events.OfType<ShotFired>().First(e => e.TargetId == targetId && e.Hit);
+    }
+
     private void RecordTrails()
     {
         foreach (var unit in Simulation.Units)

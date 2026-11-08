@@ -1,3 +1,4 @@
+using Twin.Sim.Combat;
 using Twin.Sim.Geometry;
 using Twin.Sim.Terrain;
 using Twin.Sim.Units;
@@ -72,9 +73,21 @@ public sealed class UnitAssertions
             $"to have ground speed {expectedMps} m/s, but it is {speed:0.###} m/s");
     }
 
+    /// <summary>The unit is suppressed: under fire within the suppression time, prone and not moving on.</summary>
+    public UnitAssertions BeSuppressed() =>
+        Check(_unit.IsSuppressed && _unit.Activity == UnitActivity.Suppressed, "to be suppressed");
+
+    /// <summary>The unit has the given health state.</summary>
+    public UnitAssertions HaveHealth(Health expected) =>
+        Check(_unit.Health == expected, $"to have health {expected}");
+
+    /// <summary>The unit is in the given posture.</summary>
+    public UnitAssertions BeIn(Posture expected) =>
+        Check(_unit.Posture == expected, $"to be {expected}");
+
     internal static string DescribeUnit(Unit u) =>
         $"  unit '{u.Id}': position {u.Position}, velocity {u.Velocity}, activity {u.Activity}, " +
-        $"order {u.CurrentOrder?.ToString() ?? "none"}";
+        $"health {u.Health}, posture {u.Posture}, order {u.CurrentOrder?.ToString() ?? "none"}";
 
     private UnitAssertions Check(bool condition, string expectation)
     {

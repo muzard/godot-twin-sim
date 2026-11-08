@@ -38,6 +38,20 @@ public sealed class CorridorMovementSystem : ISimSystem
             }
 
             var world = (IWorldQuery)simulation.Terrain;
+            if (unit.IsImmobilized)
+            {
+                // Pinned, suppressed or changing posture: no movement and no new plans or requests until it ends.
+                // Doctrine decides whether a permission answer that arrives meanwhile is handled now or when free.
+                unit.Velocity = Vec3.Zero;
+                if (unit.CorridorProgress is { State: CorridorState.Waiting } waiting && ReferenceEquals(waiting.Order, order) &&
+                    simulation.Config.Combat.Doctrine.PermissionAnswers == PermissionAnswerTiming.Immediately)
+                {
+                    CheckForAnswer(simulation, world, unit, profile, waiting);
+                }
+
+                continue;
+            }
+
             // A new order object starts over; re-issuing the same object after it finished does nothing more.
             if (unit.CorridorProgress is not { } progress || !ReferenceEquals(progress.Order, order))
             {
@@ -122,7 +136,7 @@ public sealed class CorridorMovementSystem : ISimSystem
                 progress.State = CorridorState.Waiting;
                 progress.Request = crossing;
                 progress.RequestedAt = simulation.TimeSeconds;
-                unit.Activity = UnitActivity.WaitingForPermission;
+                CombatQueries.SetActivity(unit, UnitActivity.WaitingForPermission);
                 simulation.Log(new PermissionRequested(simulation.TimeSeconds, unit.Id, crossing.BoundaryId, crossing.At));
                 return;
             }
@@ -137,7 +151,7 @@ public sealed class CorridorMovementSystem : ISimSystem
         progress.Route = FullRoute(from, respecting.Waypoints, to);
         progress.Next = 1;
         progress.State = CorridorState.Moving;
-        unit.Activity = UnitActivity.Moving;
+        CombatQueries.SetActivity(unit, UnitActivity.Moving);
         simulation.Log(new PathPlanned(simulation.TimeSeconds, unit.Id, respecting.Waypoints, respecting.CostSeconds));
     }
 
@@ -159,7 +173,7 @@ public sealed class CorridorMovementSystem : ISimSystem
     private static void Block(Simulation simulation, Unit unit, CorridorProgress progress, string reason)
     {
         progress.State = CorridorState.Finished;
-        unit.Activity = UnitActivity.Blocked;
+        CombatQueries.SetActivity(unit, UnitActivity.Blocked);
         unit.Velocity = Vec3.Zero;
         simulation.Log(new Blocked(simulation.TimeSeconds, unit.Id, reason));
     }
@@ -174,7 +188,7 @@ public sealed class CorridorMovementSystem : ISimSystem
         while (remaining > 0 && progress.Next < route.Count)
         {
             var target = route[progress.Next];
-            var speed = SegmentSpeed(world, profile, route[progress.Next - 1], target);
+            var speed = SegmentSpeed(world, profile, route[progress.Next - 1], target) * unit.SpeedFactor;
             var distance = position.DistanceTo(target);
             var needed = distance / speed;
             if (needed <= remaining)
@@ -203,7 +217,7 @@ public sealed class CorridorMovementSystem : ISimSystem
         else
         {
             unit.Velocity = (unit.Position - previous) * (1 / dt);
-            unit.Activity = UnitActivity.Moving;
+            CombatQueries.SetActivity(unit, UnitActivity.Moving);
         }
     }
 

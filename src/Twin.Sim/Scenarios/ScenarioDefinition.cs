@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Corridors;
 using Twin.Sim.Geometry;
@@ -16,8 +17,9 @@ public sealed class ScenarioDefinition
 {
     private ScenarioDefinition(
         LoadedWorld world, string agentId, Vec2 start, Corridor corridor, ScriptedLeader leader, PermissionRules permission,
-        MovementProfile profile, ulong seed, int tickRateHz)
+        MovementProfile profile, ulong seed, int tickRateHz, Doctrine doctrine)
     {
+        Doctrine = doctrine;
         World = world;
         AgentId = agentId;
         Start = start;
@@ -51,6 +53,9 @@ public sealed class ScenarioDefinition
     /// How the agent moves: <see cref="MovementProfile.Infantry"/>, able to rappel if <c>agent.canRappel</c> is true.
     /// </summary>
     public MovementProfile Profile { get; }
+
+    /// <summary>The scenario's doctrine (<c>doctrine</c> in scenario.json), or the default doctrine.</summary>
+    public Doctrine Doctrine { get; }
 
     /// <summary>Random seed.</summary>
     public ulong Seed { get; }
@@ -120,7 +125,7 @@ public sealed class ScenarioDefinition
         return new ScenarioDefinition(
             world, agent.GetProperty("id").GetString() ?? "agent", Local(agent.GetProperty("start")), corridor, leader,
             permission, MovementProfile.Infantry with { CanRappel = agent.TryGetProperty("canRappel", out var rappel) && rappel.GetBoolean() },
-            seed, tickRate);
+            seed, tickRate, ReadDoctrine(root));
     }
 
     /// <summary>
@@ -133,11 +138,41 @@ public sealed class ScenarioDefinition
         {
             Leader = Leader with { Answer = answer },
             Permission = Permission,
+            Combat = CombatRules.Default with { Doctrine = Doctrine },
         };
         var simulation = new Simulation(World.World, config);
         simulation.AddUnit(AgentId, Start, Profile);
         simulation.Issue(AgentId, new MoveThroughCorridor(Corridor));
         return simulation;
+    }
+
+    private static Doctrine ReadDoctrine(JsonElement root)
+    {
+        if (!root.TryGetProperty("doctrine", out var d))
+        {
+            return Doctrine.Default;
+        }
+
+        var doctrine = Doctrine.Default;
+        if (d.TryGetProperty("returnFireOverridesFireAt", out var returnFire))
+        {
+            doctrine = doctrine with { ReturnFireOverridesFireAt = returnFire.GetBoolean() };
+        }
+
+        if (d.TryGetProperty("permissionAnswers", out var answers))
+        {
+            doctrine = doctrine with
+            {
+                PermissionAnswers = answers.GetString() switch
+                {
+                    "whenFree" => PermissionAnswerTiming.WhenFree,
+                    "immediately" => PermissionAnswerTiming.Immediately,
+                    var other => throw new InvalidDataException($"Unknown permissionAnswers '{other}'; use whenFree or immediately."),
+                },
+            };
+        }
+
+        return doctrine;
     }
 
     private static LeaderAnswer ParseAnswer(string? text) => text switch

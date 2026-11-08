@@ -69,6 +69,17 @@ public sealed class TestMap
         return this;
     }
 
+    /// <summary>
+    /// Raises the ground by <paramref name="height"/> meters for cells whose center lies between
+    /// <paramref name="fromX"/> and <paramref name="toX"/> (a ridge running north–south), on top of the heights set so far.
+    /// </summary>
+    public TestMap WithRidge(double fromX, double toX, double height)
+    {
+        var below = _height;
+        _height = p => below(p) + (p.X >= fromX && p.X <= toX ? height : 0);
+        return this;
+    }
+
     /// <summary>Creates the world.</summary>
     public RasterWorld Build()
     {

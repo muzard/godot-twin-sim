@@ -70,7 +70,9 @@ unless the team changes the ADR:
 The event log has one JSON object per line, `{"v":1,"type":...,"time":...,"agent":...}` plus the event's fields.
 Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `Arrived` and `Blocked`, the log has
 `AgentPlaced`, `AgentMoved` (position after every step in which it changed), `ActivityChanged` and
-`PermissionTimedOut`, so `EventReplay` can rebuild the state at any step from the log alone (A4).
+`PermissionTimedOut`, so `EventReplay` can rebuild the state at any step from the log alone (A4). Combat
+(backlog 0002) adds `ShotFired`, `ShotHeard`, `HealthChanged`, `CasualtyOccurred`, `SuppressionStarted`,
+`SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too.
 
 Choices made while implementing, beyond the tests:
 

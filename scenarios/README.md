@@ -94,7 +94,8 @@ Points are ETRS-TM35FIN `[easting, northing]`, as read from a map; the simulatio
   },
   "leader": { "answer": "grant", "delaySeconds": 30, "permitRadius": 25 },
   "permission": { "threshold": 1.5, "timeoutSeconds": 120 },
-  "expect": { "detourWithoutCrossing": false }
+  "expect": { "detourWithoutCrossing": false },
+  "doctrine": { "returnFireOverridesFireAt": true, "permissionAnswers": "whenFree" }
 }
 ```
 
@@ -102,6 +103,12 @@ Points are ETRS-TM35FIN `[easting, northing]`, as read from a map; the simulatio
   default false) lets it cross cliffs (ADR 0010).
 - `leader.answer` is `grant`, `deny` or `noAnswer`; acceptance tests run every variant regardless of this value.
 - `hardBoundaries` are lines from the order. Forest edges need no line (ADR 0009).
+- `doctrine` (optional) holds rules decided by people, not by physics (backlog 0002). Any key left out keeps its
+  default, which is shown above:
+  - `returnFireOverridesFireAt`: true means the duty to return fire beats a `FireAt` order whose target cannot be
+    engaged.
+  - `permissionAnswers`: `whenFree` means a permission answer that arrives while the agent is pinned or suppressed is
+    handled when it is free; `immediately` means it is handled on time, but the agent still waits.
 - `expect` is read only by tests: `detourWithoutCrossing` says whether B can be reached inside the corridor without
   crossing any hard boundary, including leaving forest. A person sets it after studying the area.
 

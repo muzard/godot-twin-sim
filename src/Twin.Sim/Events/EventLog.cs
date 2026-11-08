@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Geometry;
 using Twin.Sim.Units;
@@ -109,6 +110,29 @@ public static class EventLog
             case Blocked blocked:
                 w.WriteString("reason", blocked.Reason);
                 break;
+            case ShotFired shot:
+                w.WriteString("target", shot.TargetId);
+                w.WriteBoolean("hit", shot.Hit);
+                break;
+            case ShotHeard heard:
+                w.WriteString("shooter", heard.ShooterId);
+                WritePoint(w, "shooterPosition", heard.ShooterPosition);
+                break;
+            case HealthChanged health:
+                w.WriteString("health", health.Health.ToString());
+                break;
+            case CasualtyOccurred casualty:
+                WritePoint(w, "position", casualty.Position);
+                w.WriteString("health", casualty.Health.ToString());
+                break;
+            case SuppressionStarted suppression:
+                w.WriteNumber("until", suppression.Until);
+                break;
+            case SuppressionEnded:
+                break;
+            case PostureChanged posture:
+                w.WriteString("posture", posture.Posture.ToString());
+                break;
             default:
                 throw new ArgumentException($"Unknown event type {e.GetType().Name}.", nameof(e));
         }
@@ -138,6 +162,13 @@ public static class EventLog
             nameof(PermissionTimedOut) => new PermissionTimedOut(time, agent, Text(j, "boundary")),
             nameof(Arrived) => new Arrived(time, agent, Point2(j.GetProperty("position"))),
             nameof(Blocked) => new Blocked(time, agent, Text(j, "reason")),
+            nameof(ShotFired) => new ShotFired(time, agent, Text(j, "target"), j.GetProperty("hit").GetBoolean()),
+            nameof(ShotHeard) => new ShotHeard(time, agent, Text(j, "shooter"), Point2(j.GetProperty("shooterPosition"))),
+            nameof(HealthChanged) => new HealthChanged(time, agent, Enum.Parse<Health>(Text(j, "health"))),
+            nameof(CasualtyOccurred) => new CasualtyOccurred(time, agent, Point2(j.GetProperty("position")), Enum.Parse<Health>(Text(j, "health"))),
+            nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.GetProperty("until").GetDouble()),
+            nameof(SuppressionEnded) => new SuppressionEnded(time, agent),
+            nameof(PostureChanged) => new PostureChanged(time, agent, Enum.Parse<Posture>(Text(j, "posture"))),
             _ => throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Unknown event type '{type}'.")),
         };
     }
@@ -180,7 +211,9 @@ public static class EventReplay
     /// <summary>Events this close after the requested time still count, so 0.15 s at 20 Hz includes tick 3 (0.15000000000000002 s).</summary>
     public const double TimeTolerance = 1e-9;
 
-    /// <summary>Every agent's position and activity after all events up to <paramref name="timeSeconds"/>.</summary>
+    /// <summary>
+    /// Every agent's position, activity, health, posture and suppression after all events up to <paramref name="timeSeconds"/>.
+    /// </summary>
     public static WorldSnapshot SnapshotAt(IReadOnlyList<SimEvent> events, double timeSeconds)
     {
         ArgumentNullException.ThrowIfNull(events);
@@ -202,6 +235,18 @@ public static class EventReplay
                     break;
                 case ActivityChanged changed when agents.TryGetValue(e.AgentId, out var agent):
                     agents[e.AgentId] = agent with { Activity = changed.Activity };
+                    break;
+                case HealthChanged health when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { Health = health.Health };
+                    break;
+                case PostureChanged posture when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { Posture = posture.Posture };
+                    break;
+                case SuppressionStarted when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { Suppressed = true };
+                    break;
+                case SuppressionEnded when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { Suppressed = false };
                     break;
                 default:
                     break;

@@ -1,3 +1,4 @@
+using Twin.Sim.Combat;
 using Twin.Sim.Command;
 
 namespace Twin.Sim;
@@ -15,4 +16,7 @@ public sealed record SimulationConfig(int TickRateHz = 20, ulong Seed = 1)
 
     /// <summary>When agents ask for permission and how long they wait.</summary>
     public PermissionRules Permission { get; init; } = PermissionRules.Default;
+
+    /// <summary>Rules of line of sight, hits, posture and suppression (backlog 0002).</summary>
+    public CombatRules Combat { get; init; } = CombatRules.Default;
 }
