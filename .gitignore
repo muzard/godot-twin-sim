@@ -21,3 +21,11 @@ export_presets.cfg
 # OS
 .DS_Store
 Thumbs.db
+
+# Map preprocessing: downloaded source data and secrets stay local
+prep/data/
+.env
+
+# Python
+__pycache__/
+.pytest_cache/

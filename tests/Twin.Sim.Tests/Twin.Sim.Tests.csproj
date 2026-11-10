@@ -13,5 +13,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Twin.Sim/Twin.Sim.csproj" />
+    <ProjectReference Include="../Twin.Testing/Twin.Testing.csproj" />
   </ItemGroup>
 </Project>

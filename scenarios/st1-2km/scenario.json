@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "seed": 1,
+  "dtSeconds": 0.5,
+  "agent": { "id": "alpha", "start": [403460.0, 6686940.0] },
+  "corridor": {
+    "centerline": [[403460.0, 6686940.0], [403850.0, 6686850.0], [404300.0, 6687050.0], [404650.0, 6687600.0]],
+    "width": 100,
+    "softMargin": 25,
+    "softPenalty": 1,
+    "hardBoundaries": []
+  },
+  "leader": { "answer": "grant", "delaySeconds": 30, "permitRadius": 25 },
+  "permission": { "threshold": 1.5, "timeoutSeconds": 120 }
+}

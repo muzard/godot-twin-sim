@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Acceptance tests that run on real, preprocessed map data in scenarios/ (Smoke test I: A1-A4, P1).
+    Run only these: ./dev smoke. They are also part of ./dev test, ./dev check and CI.
+  -->
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Twin.Sim/Twin.Sim.csproj" />
+    <ProjectReference Include="../Twin.Testing/Twin.Testing.csproj" />
+  </ItemGroup>
+</Project>

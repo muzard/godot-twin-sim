@@ -8,6 +8,9 @@
 //   ./dev format      apply code formatting
 //   ./dev phase       show the TDD phase; ./dev phase spec | implement to switch it
 //   ./dev run         run the headless simulation demo
+//   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
+//   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
+//   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)
 using System.Diagnostics;
 
 var root = FindRepoRoot();
@@ -22,6 +25,9 @@ return command switch
     "format" => Run("dotnet", ["format", "Twin.Core.slnf"]),
     "phase" => Phase(rest),
     "run" => Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", .. rest]),
+    "smoke" => Run("dotnet", ["test", "tests/Twin.Acceptance.Tests", "--nologo", "--logger", "console;verbosity=detailed", .. rest]),
+    "docker-test" => DockerTest(),
+    "prep" => Prep(rest),
     _ => Help(),
 };
 
@@ -92,6 +98,42 @@ int Check()
     return 0;
 }
 
+int DockerTest()
+{
+    const double LimitSeconds = 60; // Smoke test I, acceptance criterion 4
+    Console.WriteLine("== Building test image (restore is cached between runs)");
+    if (Run("docker", ["build", "--file", "docker/test.Dockerfile", "--tag", "twin-test", "."]) != 0)
+    {
+        Console.WriteLine("\nFAILED: docker build. Is Docker running?");
+        return 1;
+    }
+
+    Console.WriteLine("== Running tests in the container");
+    var started = Stopwatch.GetTimestamp();
+    var code = Run("docker", ["run", "--rm", "twin-test"]);
+    var seconds = Stopwatch.GetElapsedTime(started).TotalSeconds;
+    var verdict = seconds < LimitSeconds ? "within" : "OVER";
+    Console.WriteLine($"\nContainer test run: {(code == 0 ? "green" : "RED")}, {seconds:0.0} s ({verdict} the {LimitSeconds:0} s limit).");
+    return code;
+}
+
+int Prep(string[] a)
+{
+    if (a.Length == 0)
+    {
+        Console.WriteLine("Usage: ./dev prep <command> [args]   e.g. ./dev prep gdalinfo --version (see prep/README.md)");
+        return 1;
+    }
+
+    if (Run("docker", ["build", "--quiet", "--tag", "twin-prep", "prep"], quiet: true) != 0)
+    {
+        Console.WriteLine("FAILED: docker build prep. Is Docker running? Rebuild verbosely: docker build -t twin-prep prep");
+        return 1;
+    }
+
+    return Run("docker", ["run", "--rm", "--volume", $"{root}:/work", "twin-prep", .. a]);
+}
+
 int Phase(string[] a)
 {
     var file = Path.Combine(root, ".claude", "state", "phase");
@@ -118,7 +160,7 @@ int Phase(string[] a)
 
 int Help()
 {
-    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run>  (see tools/dev.cs for details)");
+    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run|smoke|docker-test|prep>  (see tools/dev.cs for details)");
     return 1;
 }
 

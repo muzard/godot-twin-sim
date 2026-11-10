@@ -5,8 +5,9 @@ using Twin.Sim.Units;
 namespace Twin.Sim.Systems;
 
 /// <summary>
-/// Moves units that have a <see cref="MoveTo"/> order in a straight line at their maximum ground speed,
-/// keeping them on the ground. Slope effects, terrain cost and pathfinding are future work.
+/// Moves units that have a <see cref="MoveTo"/> order in a straight line at their maximum ground speed times their
+/// posture and wound factor, keeping them on the ground. Pinned, suppressed or posture-changing units do not move.
+/// Slope effects, terrain cost and pathfinding are in <see cref="CorridorMovementSystem"/>.
 /// </summary>
 public sealed class MovementSystem : ISimSystem
 {
@@ -16,14 +17,14 @@ public sealed class MovementSystem : ISimSystem
         ArgumentNullException.ThrowIfNull(simulation);
         foreach (var unit in simulation.Units)
         {
-            if (unit.CurrentOrder is not MoveTo move)
+            if (unit.CurrentOrder is not MoveTo move || unit.IsImmobilized)
             {
                 continue;
             }
 
             var previous = unit.Position;
             var toTarget = move.Destination - previous.Xy;
-            var stepLength = unit.MaxSpeedMps * dtSeconds;
+            var stepLength = unit.MaxSpeedMps * unit.SpeedFactor * dtSeconds;
             var arrived = toTarget.Length <= stepLength;
             var next = arrived ? move.Destination : previous.Xy + (toTarget.Normalized() * stepLength);
 

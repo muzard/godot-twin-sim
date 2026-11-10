@@ -1,8 +1,12 @@
+using Twin.Sim.Combat;
+using Twin.Sim.Events;
 using Twin.Sim.Geometry;
+using Twin.Sim.Movement;
 using Twin.Sim.Orders;
 using Twin.Sim.Systems;
 using Twin.Sim.Terrain;
 using Twin.Sim.Units;
+using Twin.Sim.World;
 
 namespace Twin.Sim;
 
@@ -16,6 +20,8 @@ public sealed class Simulation
     private readonly SortedDictionary<string, Unit> _units = new(StringComparer.Ordinal);
     private readonly List<(string UnitId, Order Order)> _pendingOrders = [];
     private readonly IReadOnlyList<ISimSystem> _systems;
+    private readonly List<SimEvent> _events = [];
+    private readonly SortedDictionary<string, AgentSnapshot> _logged = new(StringComparer.Ordinal);
 
     /// <summary>Creates a simulation over the given terrain.</summary>
     public Simulation(ITerrain terrain, SimulationConfig? config = null)
@@ -26,7 +32,7 @@ public sealed class Simulation
         Random = new DeterministicRandom(Config.Seed);
 
         // System order is part of the simulation's behaviour. Change it deliberately.
-        _systems = [new MovementSystem()];
+        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new FireSystem()];
     }
 
     /// <summary>The ground surface.</summary>
@@ -47,23 +53,50 @@ public sealed class Simulation
     /// <summary>All units, ordered by id (stable iteration order is required for determinism).</summary>
     public IReadOnlyCollection<Unit> Units => _units.Values;
 
+    /// <summary>Everything that has happened so far, in order (spec v0.1 event log; see <see cref="EventLog"/>).</summary>
+    public IReadOnlyList<SimEvent> EventLog => _events;
+
     /// <summary>Places a ground unit on the map. Its height is taken from the terrain.</summary>
     public Unit AddUnit(string id, Vec2 position, double maxSpeedMps)
     {
-        if (_units.ContainsKey(id))
-        {
-            throw new ArgumentException($"A unit with id '{id}' already exists.", nameof(id));
-        }
-
-        if (!Terrain.Contains(position))
-        {
-            throw new ArgumentOutOfRangeException(nameof(position), position, "Unit must be placed on the map.");
-        }
-
-        var unit = new Unit(id, position.WithZ(Terrain.HeightAt(position)), maxSpeedMps);
-        _units.Add(id, unit);
-        return unit;
+        CheckPlacement(id, position);
+        return Place(new Unit(id, position.WithZ(Terrain.HeightAt(position)), maxSpeedMps));
     }
+
+    /// <summary>
+    /// Places an agent that moves by a movement profile: terrain-dependent speeds, slope limit and eye height.
+    /// Only such agents can take <see cref="MoveThroughCorridor"/> orders.
+    /// </summary>
+    public Unit AddUnit(string id, Vec2 position, MovementProfile profile)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        CheckPlacement(id, position);
+        return Place(new Unit(id, position.WithZ(Terrain.HeightAt(position)), profile));
+    }
+
+    /// <summary>
+    /// Places a fighter (backlog 0002): an agent with a movement profile, a side, rules of engagement and a weapon,
+    /// standing and unhurt. Line of sight and hits follow <see cref="SimulationConfig.Combat"/>.
+    /// </summary>
+    public Unit AddUnit(string id, Vec2 position, MovementProfile profile, Combatant combatant)
+    {
+        ArgumentNullException.ThrowIfNull(profile);
+        ArgumentNullException.ThrowIfNull(combatant);
+        CheckPlacement(id, position);
+        return Place(new Unit(id, position.WithZ(Terrain.HeightAt(position)), profile, combatant, Config.Combat));
+    }
+
+    /// <summary>
+    /// True if <paramref name="observerId"/> sees <paramref name="targetId"/> now: the line from its eyes to the target's
+    /// aim point is clear and the forest transmission is high enough, lower while the target's muzzle flash lasts.
+    /// </summary>
+    public bool CanSee(string observerId, string targetId) => CombatQueries.Sees(this, GetUnit(observerId), GetUnit(targetId));
+
+    /// <summary>Every agent's position, activity, health, posture and suppression now, ordered by id: what a live viewer shows.</summary>
+    public WorldSnapshot Snapshot() =>
+        new(TimeSeconds, _units.Values
+            .Select(u => new AgentSnapshot(u.Id, u.Position, u.Activity, u.Health, u.Posture, u.IsSuppressed))
+            .ToList());
 
     /// <summary>Gets a unit by id.</summary>
     public Unit GetUnit(string id) =>
@@ -71,7 +104,8 @@ public sealed class Simulation
 
     /// <summary>
     /// Issues an order. It is validated immediately and takes effect at the start of the next tick.
-    /// A new order replaces the unit's current order.
+    /// A new order replaces the unit's current order, except <see cref="SetPosture"/> and <see cref="CeaseFire"/>, which
+    /// keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). Units out of action take no orders.
     /// </summary>
     /// <exception cref="OrderRejectedException">The unit does not exist or the order is invalid.</exception>
     public void Issue(string unitId, Order order)
@@ -82,9 +116,29 @@ public sealed class Simulation
             throw new OrderRejectedException($"No unit with id '{unitId}'.");
         }
 
+        if (_units[unitId].Health == Health.OutOfAction)
+        {
+            throw new OrderRejectedException($"Unit '{unitId}' is out of action.");
+        }
+
+        if (order is FireAt fireAt)
+        {
+            ValidateFireAt(_units[unitId], fireAt);
+        }
+
+        if (order is SetPosture or CeaseFire && _units[unitId].Combatant is null)
+        {
+            throw new OrderRejectedException($"Unit '{unitId}' is not a fighter.");
+        }
+
         if (order is MoveTo move && !Terrain.Contains(move.Destination))
         {
             throw new OrderRejectedException($"Destination {move.Destination} is outside the map.");
+        }
+
+        if (order is MoveThroughCorridor corridorOrder)
+        {
+            ValidateCorridorOrder(_units[unitId], corridorOrder);
         }
 
         _pendingOrders.Add((unitId, order));
@@ -96,13 +150,143 @@ public sealed class Simulation
         Tick++;
         foreach (var (unitId, order) in _pendingOrders)
         {
-            _units[unitId].CurrentOrder = order;
+            var unit = _units[unitId];
+            switch (order)
+            {
+                case SetPosture posture:
+                    if (unit.DesiredPosture != posture.Posture)
+                    {
+                        unit.DesiredPosture = posture.Posture; // keeps the current order
+                        unit.PostureChangeUntil = null;        // a change in progress restarts toward the new posture
+                    }
+
+                    break;
+                case CeaseFire:
+                    if (unit.CurrentOrder is FireAt)
+                    {
+                        CombatQueries.EndOrder(unit);
+                    }
+
+                    break;
+                default:
+                    CombatQueries.EndOrder(unit);
+                    unit.CurrentOrder = order;
+                    break;
+            }
         }
 
         _pendingOrders.Clear();
         foreach (var system in _systems)
         {
             system.Update(this, Config.TickSeconds);
+        }
+
+        LogStateChanges();
+    }
+
+    /// <summary>Adds an event to the log. Systems call this; the time is the current simulated time.</summary>
+    internal void Log(SimEvent e) => _events.Add(e);
+
+    private void CheckPlacement(string id, Vec2 position)
+    {
+        if (_units.ContainsKey(id))
+        {
+            throw new ArgumentException($"A unit with id '{id}' already exists.", nameof(id));
+        }
+
+        if (!Terrain.Contains(position))
+        {
+            throw new ArgumentOutOfRangeException(nameof(position), position, "Unit must be placed on the map.");
+        }
+    }
+
+    private Unit Place(Unit unit)
+    {
+        _units.Add(unit.Id, unit);
+        _logged[unit.Id] = new AgentSnapshot(unit.Id, unit.Position, unit.Activity);
+        Log(new AgentPlaced(TimeSeconds, unit.Id, unit.Position));
+        return unit;
+    }
+
+    /// <summary>Logs every agent whose position or activity changed this step, so the log alone can rebuild the state.</summary>
+    private void LogStateChanges()
+    {
+        foreach (var unit in _units.Values)
+        {
+            var last = _logged[unit.Id];
+            if (unit.Position != last.Position)
+            {
+                Log(new AgentMoved(TimeSeconds, unit.Id, unit.Position));
+            }
+
+            if (unit.Activity != last.Activity)
+            {
+                Log(new ActivityChanged(TimeSeconds, unit.Id, unit.Activity));
+            }
+
+            _logged[unit.Id] = new AgentSnapshot(unit.Id, unit.Position, unit.Activity);
+        }
+    }
+
+    private void ValidateFireAt(Unit unit, FireAt order)
+    {
+        if (unit.Combatant is not { } shooter)
+        {
+            throw new OrderRejectedException($"Unit '{unit.Id}' is not a fighter.");
+        }
+
+        if (!_units.TryGetValue(order.TargetId, out var target) || target.Combatant is not { } other)
+        {
+            throw new OrderRejectedException($"No fighter with id '{order.TargetId}'.");
+        }
+
+        if (target == unit || other.Side == shooter.Side)
+        {
+            throw new OrderRejectedException($"'{order.TargetId}' is on {unit.Id}'s own side.");
+        }
+    }
+
+    private void ValidateCorridorOrder(Unit unit, MoveThroughCorridor order)
+    {
+        var corridor = order.Corridor ?? throw new OrderRejectedException("The order has no corridor.");
+        if (Terrain is not IWorldQuery)
+        {
+            throw new OrderRejectedException("Corridor orders need a raster world with terrain classes.");
+        }
+
+        if (unit.Profile is null)
+        {
+            throw new OrderRejectedException($"Unit '{unit.Id}' has no movement profile.");
+        }
+
+        if (corridor.Centerline is not { Count: >= 2 })
+        {
+            throw new OrderRejectedException("A corridor's centerline needs at least two points.");
+        }
+
+        if (!Terrain.Contains(order.Destination))
+        {
+            throw new OrderRejectedException($"The corridor ends at {order.Destination}, outside the map.");
+        }
+
+        if (corridor.Width <= 0 || corridor.SoftMargin < 0 || corridor.SoftPenalty < 0)
+        {
+            throw new OrderRejectedException("A corridor needs a positive width and a non-negative soft margin and penalty.");
+        }
+
+        var world = (IWorldQuery)Terrain;
+        foreach (var (name, point) in new[] { ("starts", unit.Position.Xy), ("would end", order.Destination) })
+        {
+            if (Segments.DistanceToPolyline(point, corridor.Centerline) > corridor.OuterLimit)
+            {
+                throw new OrderRejectedException($"Unit '{unit.Id}' {name} at {point}, outside the corridor's outer limit.");
+            }
+
+            var terrain = world.ClassAt(point.X, point.Y);
+            if (unit.Profile.BaseSpeed(terrain) <= 0)
+            {
+                throw new OrderRejectedException($"Unit '{unit.Id}' {name} at {point}, in impassable terrain ({terrain}).");
+            }
         }
     }
 
@@ -120,6 +304,10 @@ public sealed class Simulation
             hash.Add(unit.Position);
             hash.Add(unit.Velocity);
             hash.Add((long)unit.Activity);
+            hash.Add((long)unit.Health);
+            hash.Add((long)unit.Posture);
+            hash.Add(unit.IsSuppressed ? 1 : 0);
+            hash.Add(unit.RoundsLeft);
             hash.Add(unit.CurrentOrder?.ToString() ?? "none");
         }
 
