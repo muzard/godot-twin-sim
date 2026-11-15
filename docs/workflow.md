@@ -39,6 +39,10 @@ enforce it; with other tools it is a convention. In every case CI and code revie
 
 - Claude Code is our primary harness (ADR 0008). It reads `CLAUDE.md`, which imports `AGENTS.md`, and
   runs the hooks in `.claude/settings.json`. Other tools that read `AGENTS.md` work too, without hooks.
+- Shared skills, best practices, research and cross-project design live in the team's harness repository,
+  mounted at `harness/` (ADR 0011). Fetch it with `git submodule update --init harness`; update the pin
+  with `git submodule update --remote harness` and a `chore: bump harness` pull request. This
+  repository's own rules win where the two disagree.
 - The person who opens a pull request owns every line in it, however it was written.
 - Keep agent sessions scoped to one ticket. Start a new session for a new ticket.
 - If an agent is stuck (the stop hook gives up after three red attempts), take over: the problem is

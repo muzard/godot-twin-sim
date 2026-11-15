@@ -68,6 +68,20 @@ The TDD phase is set by a human with `./dev phase spec|implement`. Hooks enforce
   records in `src/Twin.Sim/Orders`, validated in `Simulation.Issue`.
 - Package versions live only in `Directory.Packages.props`. Adding or upgrading a package is its own PR.
 
+## Shared harness (`harness/`)
+
+`harness/` is a git submodule of the team's shared docs repository (`pvarki/matrix-docs`, not public yet):
+agent skills, best practices, research findings, and cross-project architecture and design. (ADR 0011)
+
+- Start at `harness/README.md` and read what is relevant before designing something new or when a
+  question is not answered by this repository's own docs.
+- This file and `docs/adr/` win over the harness where they disagree. Say so if you notice a conflict.
+- Do not edit `harness/` from here. Propose changes in the harness repository; move the pin in its own PR.
+- It is optional: nothing in the build depends on it. If `harness/` is empty, run
+  `git submodule update --init harness`. If that fails you have no access to it: carry on without it
+  and say so; never guess its contents.
+- While the harness is private, do not copy its content into this public repository.
+
 ## Definition of done
 
 - [ ] Acceptance criteria are covered by tests that a human reviewed before implementation

@@ -19,6 +19,9 @@ git lfs install
 need only the .NET SDK, not Godot. [Docker](https://www.docker.com/) is needed only for `./dev docker-test`
 and the map preprocessing (`./dev prep`).
 
+Optional, for team members with access: `git submodule update --init harness` fetches the team's shared
+docs and agent skills (not public yet) ([ADR 0011](docs/adr/0011-shared-harness-submodule.md)). Nothing in the build depends on it.
+
 Run the visual client: open `src/Twin.Client/project.godot` in Godot 4.7.2 .NET and press Play.
 Left click selects a unit, right click orders it to move, the mouse wheel zooms.
 

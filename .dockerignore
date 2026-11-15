@@ -4,6 +4,7 @@
 **/TestResults/
 .git/
 .claude/
+harness/
 .vs/
 .idea/
 **/.DS_Store
