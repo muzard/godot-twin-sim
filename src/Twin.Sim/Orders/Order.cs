@@ -15,6 +15,12 @@ public abstract record Order;
 public sealed record MoveTo(Vec2 Destination) : Order;
 
 /// <summary>
+/// Halt where the unit is: it becomes idle with zero velocity on the next tick and stays on the ground.
+/// Accepted for an idle unit, where it has no effect (backlog 0001).
+/// </summary>
+public sealed record Stop : Order;
+
+/// <summary>
 /// Move through a corridor to its last centerline point (spec v0.1): plan a route that respects the corridor and its
 /// hard boundaries, ask the leader for permission when the boundaries make the route too long, then follow it.
 /// </summary>
