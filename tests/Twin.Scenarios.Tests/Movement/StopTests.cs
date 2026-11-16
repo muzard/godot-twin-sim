@@ -20,10 +20,24 @@ public class StopTests
     {
         var sim = Scenario.Create().WithUnit("alpha", at: Start, speedMps: SpeedMps).Build();
         sim.Order("alpha", new MoveTo(Destination)).RunFor(TimeSpan.FromSeconds(10));
+        sim.Unit("alpha").Should().BeMovingToward(Destination); // precondition: really moving
 
         sim.Order("alpha", new Stop()).Step();
 
         sim.Unit("alpha").Should().BeIdle();
+    }
+
+    // Decision 2026-11-16 (docs/onboarding-notes.md, finding 3)
+    [Fact]
+    public void Stopped_unit_has_no_current_order()
+    {
+        var sim = Scenario.Create().WithUnit("alpha", at: Start, speedMps: SpeedMps).Build();
+        sim.Order("alpha", new MoveTo(Destination)).RunFor(TimeSpan.FromSeconds(10));
+        sim.Unit("alpha").Should().BeMovingToward(Destination); // precondition: really moving
+
+        sim.Order("alpha", new Stop()).Step();
+
+        sim.Unit("alpha").Should().HaveNoOrder();
     }
 
     // Criterion 2
@@ -35,6 +49,7 @@ public class StopTests
             .WithUnit("alpha", at: Start, speedMps: SpeedMps)
             .Build();
         sim.Order("alpha", new MoveTo(Destination)).RunFor(TimeSpan.FromSeconds(10));
+        sim.Unit("alpha").Should().BeMovingToward(Destination); // precondition: really moving
         var whereOrdered = sim.Unit("alpha").Position.Xy;
         var oneTickTravel = SpeedMps * sim.Simulation.Config.TickSeconds;
 
