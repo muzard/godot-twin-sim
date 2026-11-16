@@ -27,10 +27,17 @@ enforce it; with other tools it is a convention. In every case CI and code revie
    Create a branch: `feature/<ticket-id>-short-name`.
 2. **Spec:** `./dev phase spec`. Write scenario tests, one per criterion (by hand or with an agent using
    the `tdd-feature` skill). Run `./dev test`; each new test must fail for the expected reason.
+   - A test that uses a new type (for example a new order) does not compile, because `src/` is locked.
+     This is an accepted reason to fail in the spec phase.
 3. **Review the tests.** Read them as a specification, not as code: does each test describe the behaviour
    the ticket asks for? Are tolerances and timeouts sensible? Are invalid inputs covered? Commit the tests
    on their own (`test: ...`) so the review history shows them separately.
 4. **Implement:** `./dev phase implement`. Make the tests pass with the simplest change in `src/`.
+   - If a new type caused a compile error, first add the type with no behaviour. Run `./dev test`.
+     Make sure that the tests now fail on an assertion.
+   - If the tests pass before you add behaviour, do a mutation check: break the code that makes them pass,
+     run the tests, record which tests fail, then restore the code. A test that never fails does not
+     show that it can catch an error.
 5. **Refactor** while green, then `./dev check`.
 6. **Pull request:** small and focused, linked to the ticket, template filled in. CI must be green and one
    person must approve. Reviewers look at tests first, then implementation.

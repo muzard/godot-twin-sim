@@ -12,11 +12,13 @@ compile error instead of a meaningful assertion failure. A compile error also br
 so the other tests cannot run. The docs do not say whether this counts as the expected reason or how to
 avoid it (for example a stub type, or a small preparatory change to `src/` before the spec phase).
 
-**Fix:** not yet decided. Ask the team.
-
 The `tdd-feature` skill (`.claude/skills/tdd-feature/SKILL.md`) does count "a missing type/member" as a
-right reason to fail, but `docs/workflow.md` says nothing about it. See also finding 2, which shows why a
+right reason to fail, but `docs/workflow.md` said nothing about it. See also finding 2, which shows why a
 compile error alone is a weak check.
+
+**Fix (resolved):** `docs/workflow.md`, steps 2 and 4. A compile error from a new type is an accepted
+reason to fail in the spec phase. The implement phase starts by adding the type with no behaviour, so the
+tests fail on an assertion.
 
 ## 2. The Stop tests passed without any Stop handling
 
@@ -40,10 +42,10 @@ temporarily disabled and `./dev test --filter StopTests` was run. The code was t
 So criterion 1 is guarded by a test that can fail; the other tests pass under this mutation for reasons
 that are correct for them.
 
-**Fix (proposed):** in the spec phase, allow (or document) a stub type so tests compile, and add a
-"mutation check" step to `docs/workflow.md` for features that may already be covered by existing code.
+**Fix (resolved):** `docs/workflow.md`, step 4. If tests pass before any behaviour is added, do a mutation
+check and record which tests fail.
 
-## 3. Open question: the current order stays `Stop` after stopping
+## 3. The current order stayed `Stop` after stopping
 
 **Finding:** after a `Stop`, `Unit.CurrentOrder` is `Stop { }` rather than `null`, and it shows in
 diagnostics as "order Stop { }". The acceptance criteria do not say which is wanted, and no test checks it.
@@ -51,4 +53,15 @@ At first Oskari (human reviewer of ticket 0001) accepted this behaviour. Oskari 
 2026-11-16.
 
 **Decision (Oskari, 2026-11-16):** `Stop` must clear the current order, so `CurrentOrder` is `null` after
-stopping. This is to be fixed in ticket 0001.
+stopping.
+
+**Fix (resolved):** `Simulation.Step` handles `Stop` explicitly and clears the current order. Test
+`Stopped_unit_has_no_current_order` checks it.
+
+## 4. The `scenario-test` skill lists out-of-date assertions
+
+**Finding:** the list of available assertions in `.claude/skills/scenario-test/SKILL.md` does not include
+`BeSuppressed()`, `HaveHealth(health)`, `BeIn(posture)` and `HaveNoOrder()`. An agent that uses the skill
+does not know about them, or must read `tests/Twin.Testing/UnitAssertions.cs` to find them.
+
+**Fix:** open. The skill is part of the AI harness, which only a human changes. Fix it in a separate PR.
