@@ -15,8 +15,10 @@ public abstract record Order;
 public sealed record MoveTo(Vec2 Destination) : Order;
 
 /// <summary>
-/// Halt where the unit is: it becomes idle with zero velocity on the next tick and stays on the ground.
-/// Accepted for an idle unit, where it has no effect (backlog 0001).
+/// Halt where the unit is (backlog 0001). On the next tick the current order ends, including a
+/// <see cref="FireAt"/>, so the unit stops shooting too. The unit keeps no current order and has zero velocity.
+/// It becomes idle on that tick, or, if it is in a combat state (suppressed, pinned, changing posture), once that
+/// state ends. Accepted for an idle unit, where it has no effect.
 /// </summary>
 public sealed record Stop : Order;
 
