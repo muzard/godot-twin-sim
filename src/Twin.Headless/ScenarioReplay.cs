@@ -1,4 +1,6 @@
 using System.Globalization;
+using Twin.Sim;
+using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Events;
 using Twin.Sim.Scenarios;
@@ -17,7 +19,8 @@ internal static class ScenarioReplay
     public const string Usage =
         "Usage: ./dev replay <scenario | log.jsonl> [--answer Grant|Deny|NoAnswer] [--every 60] [--out file.jsonl] [--max-seconds 7200]\n" +
         "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
-        "  Exit code 2: the agent was neither idle nor blocked when --max-seconds ran out.";
+        "  st1-combat runs a built-in fire fight on st1 (two fire teams of three) to replays/st1-combat.jsonl.\n" +
+        "  Exit code 2: the run was not over (agent idle or blocked, fight decided) when --max-seconds ran out.";
 
     public static int Run(string[] args)
     {
@@ -61,6 +64,22 @@ internal static class ScenarioReplay
             return 0;
         }
 
+        if (target == CombatDemo.Name)
+        {
+            if (options.ContainsKey("--answer"))
+            {
+                Console.WriteLine("--answer does not apply to the combat demo: it has no leader.");
+                return 1;
+            }
+
+            var fight = CombatDemo.Create("scenarios");
+            return RunAndReplay(
+                fight, () => CombatDemo.IsOver(fight), CombatDemo.Name, options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{CombatDemo.Name}.jsonl"),
+                () => string.Create(CultureInfo.InvariantCulture,
+                    $"{fight.EventLog.OfType<ShotFired>().Count()} shots, {fight.Units.Count(u => u.Health == Health.OutOfAction)} out of action"),
+                every, maxSeconds);
+        }
+
         var dir = Directory.Exists(target) ? target : Path.Combine("scenarios", target);
         if (!Directory.Exists(dir))
         {
@@ -78,30 +97,35 @@ internal static class ScenarioReplay
         }
 
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir)));
-        var file = Path.GetFullPath(options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl"));
-
         var scenario = ScenarioDefinition.Load(dir);
         var simulation = scenario.CreateSimulation(answer);
         var agent = simulation.GetUnit(scenario.AgentId);
+        return RunAndReplay(
+            simulation, () => agent.IsIdle || agent.Activity == UnitActivity.Blocked, $"{name} ({answer})",
+            options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl"),
+            () => $"agent {agent.Id} {agent.Activity}", every, maxSeconds);
+    }
+
+    private static int RunAndReplay(
+        Simulation simulation, Func<bool> isDone, string title, string outFile, Func<string> outcome, double every, double maxSeconds)
+    {
         do
         {
             simulation.Step();
         }
-        while (!(agent.IsIdle || agent.Activity == UnitActivity.Blocked) && simulation.TimeSeconds < maxSeconds);
+        while (!isDone() && simulation.TimeSeconds < maxSeconds);
 
-        var timedOut = !(agent.IsIdle || agent.Activity == UnitActivity.Blocked);
-
+        var file = Path.GetFullPath(outFile);
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllText(file, EventLog.ToJsonLines(simulation.EventLog));
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-            $"Ran {name} ({answer}) to t={simulation.TimeSeconds:0.0} s, agent {agent.Id} {agent.Activity}; {simulation.EventLog.Count} events -> {file}"));
+            $"Ran {title} to t={simulation.TimeSeconds:0.0} s, {outcome()}; {simulation.EventLog.Count} events -> {file}"));
 
         // Replay from the file alone, not from the simulation in memory.
         Print(EventLog.FromJsonLines(File.ReadAllText(file)), simulation.TimeSeconds, every);
-        if (timedOut)
+        if (!isDone())
         {
-            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
-                $"TIMED OUT: agent {agent.Id} was still {agent.Activity} after --max-seconds {maxSeconds:0.#}."));
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture, $"TIMED OUT: the run was not over after --max-seconds {maxSeconds:0.#}."));
             return 2;
         }
 

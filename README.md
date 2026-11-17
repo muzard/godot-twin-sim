@@ -8,7 +8,7 @@ using the team's agreed workflow, so every next feature can follow the same path
 
 Prerequisites: [.NET SDK 10](https://dotnet.microsoft.com/download) (pinned in `global.json`),
 Git with [Git LFS](https://git-lfs.com), and — only for the visual client —
-[Godot 4.7.2 .NET edition](https://godotengine.org/download/archive/4.7.2-stable/).
+[Godot 4.7.2 .NET edition](https://godotengine.org/download/archive/4.7.2-stable/) (where to put it: `GODOT_README.md`).
 
 ```sh
 git lfs install

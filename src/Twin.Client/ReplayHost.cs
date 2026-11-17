@@ -21,6 +21,7 @@ public partial class ReplayHost : Node2D
 
     private const int EventLines = 14;
     private const float MinZoom = 0.05f;
+    private const double MinFocusMeters = 300;
     private const float MaxZoom = 40f;
 
     private IReadOnlyList<SimEvent> _events = [];
@@ -35,7 +36,7 @@ public partial class ReplayHost : Node2D
     private double _speed = 10;
     private bool _playing = true;
     private bool _updatingSlider;
-    private Vector2 _mapSize;
+    private Rect2 _focus;
 
     /// <inheritdoc />
     public override void _Ready()
@@ -60,8 +61,8 @@ public partial class ReplayHost : Node2D
         _layer = new ReplayLayer(_events, corridor, world, _mapper);
         AddChild(_layer);
 
-        _mapSize = new Vector2(_mapper.ToScreenLength(world.WidthMeters), _mapper.ToScreenLength(world.DepthMeters));
-        _camera = new Camera2D { Position = _mapSize / 2 };
+        _focus = Focus(world, corridor);
+        _camera = new Camera2D { Position = _focus.GetCenter() };
         AddChild(_camera);
 
         _log = HudLabel(hud, Vector2.Zero);
@@ -189,7 +190,8 @@ public partial class ReplayHost : Node2D
             var scenario = ScenarioDefinition.Load(scenarioDir);
             _events = EventLog.FromJsonLines(File.ReadAllText(logFile));
             world = scenario.World.World;
-            corridor = scenario.Corridor;
+            // A log of another run on the same map (such as the combat demo) does not have this scenario's agent or corridor.
+            corridor = _events.Any(e => e.AgentId == scenario.AgentId) ? scenario.Corridor : null;
             title = $"{Path.GetFileName(logFile)} on {Path.GetFileName(Path.TrimEndingDirectorySeparator(scenarioDir))}";
             error = string.Empty;
             return true;
@@ -248,9 +250,37 @@ public partial class ReplayHost : Node2D
         _log.Size = new Vector2(420, 0);
 
         // Fit the whole map between the status text and the timeline.
-        var fit = Math.Max(MinZoom, Math.Min((size.X - 40) / _mapSize.X, (size.Y - 200) / _mapSize.Y));
+        var fit = Math.Max(MinZoom, Math.Min((size.X - 40) / _focus.Size.X, (size.Y - 200) / _focus.Size.Y));
         _camera.Zoom = new Vector2(fit, fit);
-        _camera.Position = _mapSize / 2 + new Vector2(0, -40 / fit);
+        _camera.Position = _focus.GetCenter() + new Vector2(0, -40 / fit);
+    }
+
+    /// <summary>
+    /// What the camera frames at the start: where the agents start and the corridor, with a margin, at least
+    /// <see cref="MinFocusMeters"/> across and never more than the whole map.
+    /// </summary>
+    private Rect2 Focus(RasterWorld world, Corridor? corridor)
+    {
+        var points = _events.OfType<AgentPlaced>().Select(p => p.Position.Xy)
+            .Concat(corridor?.Centerline ?? [])
+            .Select(_mapper.ToScreen)
+            .ToList();
+        var map = new Rect2(Vector2.Zero, _mapper.ToScreenLength(world.WidthMeters), _mapper.ToScreenLength(world.DepthMeters));
+        if (points.Count == 0)
+        {
+            return map;
+        }
+
+        var box = new Rect2(points[0], Vector2.Zero);
+        foreach (var p in points)
+        {
+            box = box.Expand(p);
+        }
+
+        var minSize = _mapper.ToScreenLength(MinFocusMeters);
+        var size = new Vector2(Math.Max(box.Size.X, minSize), Math.Max(box.Size.Y, minSize)) * 1.3f;
+        var focus = new Rect2(box.GetCenter() - (size / 2), size);
+        return focus.Size.X >= map.Size.X || focus.Size.Y >= map.Size.Y ? map : focus;
     }
 
     private static Vector2 ClampZoom(Vector2 zoom)
