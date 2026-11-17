@@ -9,7 +9,8 @@
 //   ./dev phase       show the TDD phase; ./dev phase spec | implement to switch it
 //   ./dev run         run the headless simulation demo
 //   ./dev replay <scenario> run a scenario (e.g. st1), write its event log to replays/ and replay the log;
-//                     options --answer Grant|Deny|NoAnswer, --every <s>; a .jsonl path only replays that log
+//                     options --answer Grant|Deny|NoAnswer, --every <s>, --out <file>, --max-seconds <s>;
+//                     a .jsonl path only replays that log
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)

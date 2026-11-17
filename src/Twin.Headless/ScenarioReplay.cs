@@ -13,9 +13,11 @@ namespace Twin.Headless;
 /// </summary>
 internal static class ScenarioReplay
 {
+    /// <summary>Command line help, printed on any usage error.</summary>
     public const string Usage =
         "Usage: ./dev replay <scenario | log.jsonl> [--answer Grant|Deny|NoAnswer] [--every 60] [--out file.jsonl] [--max-seconds 7200]\n" +
-        "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.";
+        "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
+        "  Exit code 2: the agent was neither idle nor blocked when --max-seconds ran out.";
 
     public static int Run(string[] args)
     {
@@ -26,10 +28,22 @@ internal static class ScenarioReplay
         }
 
         var target = args[0];
-        var every = Option(args, "--every", 60.0);
-        if (every <= 0)
+        var options = new SortedDictionary<string, string>(StringComparer.Ordinal);
+        for (var i = 1; i < args.Length; i += 2)
         {
-            Console.WriteLine("--every must be positive.");
+            if (Array.IndexOf(KnownOptions, args[i]) < 0 || i + 1 >= args.Length)
+            {
+                Console.WriteLine($"Unknown option or missing value: {args[i]}\n{Usage}");
+                return 1;
+            }
+
+            options[args[i]] = args[i + 1];
+        }
+
+        if (!TryNumber(options, "--every", 60.0, out var every) || every <= 0 ||
+            !TryNumber(options, "--max-seconds", TimeSpan.FromHours(2).TotalSeconds, out var maxSeconds) || maxSeconds <= 0)
+        {
+            Console.WriteLine($"--every and --max-seconds must be positive numbers.\n{Usage}");
             return 1;
         }
 
@@ -54,7 +68,7 @@ internal static class ScenarioReplay
             return 1;
         }
 
-        var answerText = OptionText(args, "--answer") ?? nameof(LeaderAnswer.Grant);
+        var answerText = options.GetValueOrDefault("--answer") ?? nameof(LeaderAnswer.Grant);
         if (!Enum.TryParse<LeaderAnswer>(answerText, ignoreCase: true, out var answer) || !Enum.IsDefined(answer))
         {
             Console.WriteLine($"Unknown --answer '{answerText}'. Use Grant, Deny or NoAnswer.");
@@ -62,8 +76,7 @@ internal static class ScenarioReplay
         }
 
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir)));
-        var file = Path.GetFullPath(OptionText(args, "--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl"));
-        var maxSeconds = Option(args, "--max-seconds", TimeSpan.FromHours(2).TotalSeconds);
+        var file = Path.GetFullPath(options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl"));
 
         var scenario = ScenarioDefinition.Load(dir);
         var simulation = scenario.CreateSimulation(answer);
@@ -74,6 +87,8 @@ internal static class ScenarioReplay
         }
         while (!(agent.IsIdle || agent.Activity == UnitActivity.Blocked) && simulation.TimeSeconds < maxSeconds);
 
+        var timedOut = !(agent.IsIdle || agent.Activity == UnitActivity.Blocked);
+
         Directory.CreateDirectory(Path.GetDirectoryName(file)!);
         File.WriteAllText(file, EventLog.ToJsonLines(simulation.EventLog));
         Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
@@ -81,6 +96,13 @@ internal static class ScenarioReplay
 
         // Replay from the file alone, not from the simulation in memory.
         Print(EventLog.FromJsonLines(File.ReadAllText(file)), simulation.TimeSeconds, every);
+        if (timedOut)
+        {
+            Console.WriteLine(string.Create(CultureInfo.InvariantCulture,
+                $"TIMED OUT: agent {agent.Id} was still {agent.Activity} after --max-seconds {maxSeconds:0.#}."));
+            return 2;
+        }
+
         return 0;
     }
 
@@ -108,15 +130,12 @@ internal static class ScenarioReplay
         }
     }
 
-    private static string? OptionText(string[] args, string name)
-    {
-        var index = Array.IndexOf(args, name);
-        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
-    }
+    private static readonly string[] KnownOptions = ["--answer", "--every", "--out", "--max-seconds"];
 
-    private static double Option(string[] args, string name, double fallback)
+    private static bool TryNumber(SortedDictionary<string, string> options, string name, double fallback, out double value)
     {
-        var text = OptionText(args, name);
-        return text is null ? fallback : double.Parse(text, CultureInfo.InvariantCulture);
+        value = fallback;
+        return !options.TryGetValue(name, out var text) ||
+               double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
     }
 }
