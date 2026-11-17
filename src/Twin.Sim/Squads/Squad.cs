@@ -51,7 +51,7 @@ public sealed class Squad
     /// <summary>Commands on their way to members, in the order they were scheduled.</summary>
     internal List<Delivery> Deliveries { get; } = [];
 
-    /// <summary>A member's role, team and experience.</summary>
+    /// <summary>A member's role and team. (Its experience is its own as a fighter: <see cref="Combat.Combatant.Experience"/>.)</summary>
     /// <exception cref="KeyNotFoundException">The agent is not in this squad.</exception>
     public SquadMember Member(string unitId) =>
         _members.TryGetValue(unitId, out var member) ? member : throw new KeyNotFoundException($"'{unitId}' is not in squad '{Id}'.");

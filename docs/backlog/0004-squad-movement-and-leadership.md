@@ -214,10 +214,10 @@ An optional `squad` section next to the existing single `agent` (schema stays 1)
   "formation": "wedge",
   "teams": ["command", "point", "support"],
   "members": [
-    { "id": "rj",  "role": "squadLeader",     "team": "command", "experience": "experienced" },
-    { "id": "pj1", "role": "teamLeader",      "team": "point",   "experience": "inexperienced" },
-    { "id": "vj",  "role": "secondInCommand", "team": "support", "experience": "experienced" },
-    { "id": "kk",  "role": "machineGunner",   "team": "support", "experience": "inexperienced", "weapon": "machineGun" }
+    { "id": "rj",  "role": "squadLeader",     "team": "command", "experience": "regular" },
+    { "id": "pj1", "role": "teamLeader",      "team": "point",   "experience": "conscript" },
+    { "id": "vj",  "role": "secondInCommand", "team": "support", "experience": "regular" },
+    { "id": "kk",  "role": "machineGunner",   "team": "support", "experience": "conscript", "weapon": "machineGun" }
   ]
 },
 "squadDoctrine": {
@@ -232,7 +232,8 @@ An optional `squad` section next to the existing single `agent` (schema stays 1)
 
 Every key of `squadDoctrine` is optional and keeps its default, as with `doctrine` in 0002. scenarios/README.md
 documents them when the part that reads them lands. Members start in their slots around `start`; the order and the
-corridor are the same as for one agent.
+corridor are the same as for one agent. A member's `experience` is its `Combatant.Experience` (`conscript`, `regular`,
+`specialForces`; see "Experience unified with 0003").
 
 ### Godot replay viewer
 Lines from each member to its leader, the leader marked, the formation's name, suppression level, and commands,
@@ -299,6 +300,19 @@ The mapping lives in one place in each: `SquadDoctrine.ActsDirectly` and `Reacti
 - S4 (suppression strength by rate of fire) and S5 (contact, drills) were designed before 0003, which already models
   suppression as fire pressure with light and heavy levels, a contact report and an immediate action drill. Both parts
   must be redesigned on 0003's model before their spec phase.
+- A side effect: an inexperienced squad member is a `Conscript` in combat too (lower accuracy, lower suppression
+  threshold, slower snap shot).
+
+#### Known limitations of S1 with 0003's drill (inputs to the S5 redesign)
+No S1 scenario reaches these (squads hold fire by default, and the drill does not start under `HoldFire`), and none is
+tested. They are recorded so S5 decides them on purpose:
+- **A squad posture command and the drill both set a member's posture, and the last one wins.** A "Maahan!" that
+  reaches a member rushing to cover leaves it prone in that drill stage (the drill moves only a crouching agent); a
+  standing command makes a member in the drill stand under fire; and when the drill ends it restores the posture it
+  started from, undoing a squad posture command received during it.
+- **`SetSquadPosture` ends the leader's own drill** like any new order (only `SetPosture` is exempt), marks its
+  attackers as answered, and does not restore the order the drill suspended, so the leader is left idle. Its doc
+  comment says it keeps the current order, as `SetPosture` does.
 
 #### API the S1 tests need from `Twin.Sim`
 *(As implemented after the merge with 0003: `SquadMember` has no experience; the old `Squads.Experience` enum is gone.)*

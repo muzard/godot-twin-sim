@@ -75,9 +75,9 @@ public sealed class SquadSystem : ISimSystem
             .Select(m => m.UnitId)
             .ToList();
 
-    /// <summary>A member's experience: its own as a fighter (every squad member is one).</summary>
+    /// <summary>A member's experience: its own as a fighter (<see cref="Simulation.AddSquad"/> accepts only fighters).</summary>
     private static Experience ExperienceOf(Simulation simulation, string unitId) =>
-        simulation.GetUnit(unitId).Combatant?.Experience ?? Experience.Regular;
+        simulation.GetUnit(unitId).Combatant!.Experience;
 
     private static void Deliver(Simulation simulation, Squad squad)
     {
