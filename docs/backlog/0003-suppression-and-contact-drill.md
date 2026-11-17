@@ -32,7 +32,9 @@ Decided with the product owner on 2026-11-17.
   to a firing position; more heavily suppressed, it stays where it is. It may leave cover to reach a firing position.
 - **Never fire towards one's own:** a fighter does not fire when an own fighter is within **30° either side** of its
   muzzle direction (a 60° sector), as at the rear of a wedge with team-mates in front. It then has to move to a
-  firing position from which it can fire, **forward** by default.
+  firing position from which it can fire, **forward** by default. The sector reaches out to the weapon's maximum
+  range: own fighters beyond it are ignored, those within it always count.
+- Lightly suppressed means pressure below `2 τ`; an agent that is not suppressed rushes to cover crouching.
 - **Three snap shots** for every experience level, so the drill stays deterministic.
 - The agent waits for orders indefinitely by default. The later goal is that a fallen or incapacitated leader is
   replaced along the chain of command (later ticket).
@@ -88,7 +90,8 @@ with area fire.
 ### Fire sector (LF)
 A shooter's **fire sector** is the 60° sector centred on its direction to the target: everything within **30°**
 (decided, to be calibrated) either side of that direction, in front of the shooter, out to the weapon's maximum range.
-It is **clear** when no other agent of the shooter's side is in it. Angles are measured on the map (X, Y). **No shot is
+It is **clear** when no other agent of the shooter's side is in it. Own agents beyond the weapon's maximum range are
+ignored; within it they count, also far beyond the target and in dead ground (decided). Angles are measured on the map (X, Y). **No shot is
 fired into a sector that is not clear**, whatever the reason for the shot (order, rule of engagement or drill).
 
 Outside the drill, an agent waiting for a clear sector keeps its target and order and does not move. In the drill it
@@ -137,7 +140,7 @@ This replaces 0002's "a shot suppresses for 10 s".
 6. **States:**
    - **Suppressed** when `L ≥ τ`; ends when `L` falls below `0.25 τ` **[PROPOSAL]**. The gap stops the state
      flickering. Effects as in 0002: prone, stops its order's movement, hit factor 0.3.
-   - **Lightly suppressed** is the lower part of it, `L < 2 τ` **[PROPOSAL]**: in the drill, the agent may still
+   - **Lightly suppressed** is the lower part of it, `L < 2 τ` (decided, to be calibrated): in the drill, the agent may still
      crawl to cover or to a firing position. From `2 τ` up it stays where it is.
    - **Heavily suppressed** when `L ≥ 5 τ` **[PROPOSAL, kept high on purpose]**: as suppressed, and it does not fire
      at all. Against a regular or special-forces agent, sustained aimed rifle fire from one shooter levels off below it
@@ -174,7 +177,7 @@ without crossing a hard boundary (v0.1 rules). The search is deterministic:
 ### Moving in the drill
 | Agent's state | Moves to cover or a firing position |
 |---|---|
-| Not suppressed | rushing, crouching **[PROPOSAL]** |
+| Not suppressed | rushing, crouching (decided) |
 | Lightly suppressed (`τ ≤ L < 2 τ`) | crawling, prone |
 | Suppressed from `2 τ`, or heavily | does not move |
 
@@ -330,10 +333,14 @@ not a weakened test.
 - Assertions: `.BeHeavilySuppressed()`, `.BeInDrillStage(ContactDrillStage.ReturningFire)`, `.BeAwaitingOrders()`.
 
 ## Open questions
-1. **Light suppression limit:** is `2 τ` the right upper limit for crawling?
-2. **Rushing when not suppressed:** crouching at half speed (proposal), or standing at full speed?
-3. **The sector's reach:** a friend anywhere in the sector out to the weapon's range blocks fire (proposal). Should a
-   friend far beyond the target, or one lying in dead ground the rounds cannot reach, be ignored?
+None as of 2026-11-17. The [PROPOSAL] values stand until calibration.
+
+## TODO
+- **Scanning range:** no agent scans beyond **2 km** (a magic number, to be calibrated). This covers the per-tick
+  searches over other agents: target choice and seeing (`Sees`), the fire-sector check (LF), bystander pressure (SU2)
+  and the positions' attacker checks (CP). Kept as one value in `CombatRules`, so it is tuned in one place. Weapon
+  ranges stay as they are; the limit only cuts work that cannot matter. The spec phase decides whether this ticket
+  includes it or it becomes its own small ticket.
 
 ## Later tickets
 - `BreakContact` (irti) and `Hook` (haka) orders, and a scripted leader who gives them.
