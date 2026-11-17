@@ -5,6 +5,12 @@ using Twin.Sim.Orders;
 using Twin.Sim.Terrain;
 
 // Usage: dotnet run --project src/Twin.Headless -- [--seconds 120] [--seed 1]
+//        dotnet run --project src/Twin.Headless -- replay <scenario | log.jsonl> [options]   (./dev replay, see ScenarioReplay)
+if (args.Length > 0 && args[0] == "replay")
+{
+    return Twin.Headless.ScenarioReplay.Run(args[1..]);
+}
+
 var seconds = ReadOption(args, "--seconds", 120.0);
 var seed = (ulong)ReadOption(args, "--seed", 1.0);
 

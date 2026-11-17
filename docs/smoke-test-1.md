@@ -74,6 +74,22 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 (backlog 0002) adds `ShotFired`, `ShotHeard`, `HealthChanged`, `CasualtyOccurred`, `SuppressionStarted`,
 `SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too.
 
+To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated
+time), writes the log to `replays/st1-Grant.jsonl` (ignored by Git), reads it back and prints every agent's state
+every 60 s of simulated time. Options: `--answer Grant|Deny|NoAnswer` (the scripted leader), `--every <seconds>`,
+`--out <file.jsonl>`, `--max-seconds <s>` (exit code 2 if the agent is still busy when it runs out). `./dev replay replays/st1-Grant.jsonl` only replays an existing log.
+Relative paths are relative to the repository root. The code is `src/Twin.Headless/ScenarioReplay.cs`.
+
+Add `--godot` to watch the run on the map: `./dev replay st1 --godot` (or `./dev replay replays/st1-Grant.jsonl --godot`)
+builds the client and opens `src/Twin.Client/Replay.tscn` in Godot (found through `GODOT`, `PATH` or
+`Godot_mono.app` in `/Applications` or `~/Applications`; on Windows set `GODOT` to the Godot .NET executable). The viewer runs no simulation: it rebuilds each moment from
+the log with `EventReplay` and draws the terrain classes with relief and contours, the corridor (inner zone, soft
+zone, centerline, hard boundaries), cliffs, the planned route, the trail walked so far, permission requests and their answers, shots
+of the last second, casualties and the agents (color = health, flatter = lower posture, yellow edge = suppressed),
+with the latest events listed on the right. Keys: space play/pause, left/right −/+1 s (shift 10 s), up/down speed,
+home/end; wheel zooms, dragging pans, the slider at the bottom seeks. A log whose file name does not start with its
+scenario needs `--scenario <name>`.
+
 Choices made while implementing, beyond the tests:
 
 - A route that only touches a drawn hard boundary counts as crossing it (conservative).

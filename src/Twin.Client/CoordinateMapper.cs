@@ -22,6 +22,9 @@ public sealed class CoordinateMapper(double mapWidthMeters, double mapDepthMeter
     public Vector2 ToScreen(Vec2 map) =>
         new((float)(map.X * PixelsPerMeter), (float)((MapDepthMeters - map.Y) * PixelsPerMeter));
 
+    /// <summary>A length in simulated meters as screen pixels at zoom 1.</summary>
+    public float ToScreenLength(double meters) => (float)(meters * PixelsPerMeter);
+
     /// <summary>Screen position to simulation map position.</summary>
     public Vec2 ToMap(Vector2 screen) =>
         new(screen.X / PixelsPerMeter, MapDepthMeters - (screen.Y / PixelsPerMeter));

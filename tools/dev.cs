@@ -8,6 +8,10 @@
 //   ./dev format      apply code formatting
 //   ./dev phase       show the TDD phase; ./dev phase spec | implement to switch it
 //   ./dev run         run the headless simulation demo
+//   ./dev replay <scenario> run a scenario (e.g. st1), write its event log to replays/ and replay the log;
+//                     options --answer Grant|Deny|NoAnswer, --every <s>, --out <file>, --max-seconds <s>;
+//                     a .jsonl path only replays that log; --godot opens the replay in the Godot client
+//                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it)
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)
@@ -25,6 +29,7 @@ return command switch
     "format" => Run("dotnet", ["format", "Twin.Core.slnf"]),
     "phase" => Phase(rest),
     "run" => Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", .. rest]),
+    "replay" => Replay(rest),
     "smoke" => Run("dotnet", ["test", "tests/Twin.Acceptance.Tests", "--nologo", "--logger", "console;verbosity=detailed", .. rest]),
     "docker-test" => DockerTest(),
     "prep" => Prep(rest),
@@ -57,7 +62,7 @@ int Setup()
 void CheckGodot()
 {
     var wanted = File.ReadAllText(Path.Combine(root, ".godot-version")).Trim();
-    var godot = Environment.GetEnvironmentVariable("GODOT") ?? "godot";
+    var godot = FindGodot();
     var output = Capture(godot, "--version");
     if (output is null)
     {
@@ -96,6 +101,103 @@ int Check()
 
     Console.WriteLine("\nAll checks passed.");
     return 0;
+}
+
+int Replay(string[] a)
+{
+    var options = a.ToList();
+    if (!options.Remove("--godot"))
+    {
+        return Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. options]);
+    }
+
+    // --scenario only names the map for the viewer; the headless runner does not take it.
+    var scenarioIndex = options.IndexOf("--scenario");
+    string? scenario = null;
+    if (scenarioIndex >= 0 && scenarioIndex + 1 < options.Count)
+    {
+        scenario = options[scenarioIndex + 1];
+        options.RemoveRange(scenarioIndex, 2);
+    }
+
+    var target = options.FirstOrDefault() ?? string.Empty;
+    string log;
+    if (target.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
+    {
+        log = target;
+        if (!File.Exists(Path.Combine(root, log)))
+        {
+            Console.WriteLine($"Log file not found: {log}");
+            return 1;
+        }
+
+        var name = Path.GetFileNameWithoutExtension(target);
+        scenario ??= name.Contains('-') ? name[..name.LastIndexOf('-')] : name;
+    }
+    else
+    {
+        scenario = target;
+        log = OptionValue(options, "--out") ?? string.Empty;
+        if (log.Length == 0)
+        {
+            // Name the log here and hand it to the runner, so both use the same file.
+            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl); it rejects other answers.
+            var answer = OptionValue(options, "--answer")?.ToLowerInvariant() switch
+            {
+                null or "grant" => "Grant",
+                "deny" => "Deny",
+                "noanswer" => "NoAnswer",
+                var other => other,
+            };
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
+            log = Path.Combine("replays", $"{name}-{answer}.jsonl");
+            options.AddRange(["--out", log]);
+        }
+
+        // Exit code 2 means the run timed out; its log is still worth looking at.
+        var code = Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. options]);
+        if (code is not (0 or 2))
+        {
+            return code;
+        }
+    }
+
+    var scenarioDir = Directory.Exists(Path.Combine(root, scenario)) ? scenario : Path.Combine("scenarios", scenario);
+    if (!Directory.Exists(Path.Combine(root, scenarioDir)))
+    {
+        Console.WriteLine($"Scenario not found: {scenario}. Name the map with --scenario <name>.");
+        return 1;
+    }
+
+    Console.WriteLine("== Building the Godot client");
+    if (Run("dotnet", ["build", "src/Twin.Client", "--nologo", "--verbosity", "quiet"]) != 0)
+    {
+        return 1;
+    }
+
+    Console.WriteLine($"== Opening {log} in Godot");
+    return Run(FindGodot(), ["--path", Path.Combine(root, "src", "Twin.Client"), "res://Replay.tscn", "--",
+        "--scenario", Path.GetFullPath(scenarioDir, root), "--log", Path.GetFullPath(log, root)]);
+}
+
+static string? OptionValue(List<string> options, string name)
+{
+    var index = options.IndexOf(name);
+    return index >= 0 && index + 1 < options.Count ? options[index + 1] : null;
+}
+
+string FindGodot()
+{
+    if (Environment.GetEnvironmentVariable("GODOT") is { Length: > 0 } fromEnvironment)
+    {
+        return fromEnvironment;
+    }
+
+    // macOS installs the app bundle without putting it on PATH.
+    var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    string[] bundles = ["/Applications/Godot_mono.app", Path.Combine(home, "Applications", "Godot_mono.app")];
+    var bundle = bundles.FirstOrDefault(b => File.Exists(Path.Combine(b, "Contents", "MacOS", "Godot")));
+    return bundle is null || Capture("godot", "--version") is not null ? "godot" : Path.Combine(bundle, "Contents", "MacOS", "Godot");
 }
 
 int DockerTest()
@@ -160,7 +262,7 @@ int Phase(string[] a)
 
 int Help()
 {
-    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run|smoke|docker-test|prep>  (see tools/dev.cs for details)");
+    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run|replay|smoke|docker-test|prep>  (see tools/dev.cs for details)");
     return 1;
 }
 
