@@ -28,8 +28,11 @@ Decided with the product owner on 2026-11-17.
   with aimed shots, 3) wait for the leader's orders** (break contact, hook, …).
 - **Cover comes first:** if the agent is in danger of being hit, it first moves to cover, even cover from which it
   cannot fire. From there it moves on to a good firing position.
-- **Never fire towards one's own:** a fighter does not fire when own fighters are on or near the line of fire, as at
-  the rear of a wedge with team-mates in between.
+- **How the agent moves depends on how suppressed it is.** Lightly suppressed, it may still move (crawl) to cover or
+  to a firing position; more heavily suppressed, it stays where it is. It may leave cover to reach a firing position.
+- **Never fire towards one's own:** a fighter does not fire when an own fighter is within **30° either side** of its
+  muzzle direction (a 60° sector), as at the rear of a wedge with team-mates in front. It then has to move to a
+  firing position from which it can fire, **forward** by default.
 - **Three snap shots** for every experience level, so the drill stays deterministic.
 - The agent waits for orders indefinitely by default. The later goal is that a fallen or incapacitated leader is
   replaced along the chain of command (later ticket).
@@ -82,11 +85,14 @@ snap shot, 25 m in the open against a standing target: 0.6 · e^(−25/150) · 1
 Sustained suppressive fire on order (for example a machine gun keeping a position down) is a later ticket, together
 with area fire.
 
-### Line of fire (LF)
-A shooter's **line of fire** is the ray from its eye through the target's aim point, out to the weapon's maximum
-range. It is **clear** when no other agent of the shooter's side is within **5 m [PROPOSAL]** of it, in front of the
-shooter. **No shot is fired on a line of fire that is not clear**, whatever the reason for the shot (order, rule of
-engagement or drill). An agent waiting for a clear line keeps its target and order.
+### Fire sector (LF)
+A shooter's **fire sector** is the 60° sector centred on its direction to the target: everything within **30°**
+(decided, to be calibrated) either side of that direction, in front of the shooter, out to the weapon's maximum range.
+It is **clear** when no other agent of the shooter's side is in it. Angles are measured on the map (X, Y). **No shot is
+fired into a sector that is not clear**, whatever the reason for the shot (order, rule of engagement or drill).
+
+Outside the drill, an agent waiting for a clear sector keeps its target and order and does not move. In the drill it
+moves to a firing position with a clear sector (CP).
 
 ### Weapons (W)
 `WeaponProfile` gets:
@@ -120,8 +126,8 @@ This replaces 0002's "a shot suppresses for 10 s".
 1. **Miss distance at the target:** each round passes the target at the expected distance
    `m = d · σ_M · σ_X · Q`, with d the range and σ_M in radians (1 mil = 0.001 rad). It is an expected value, not a
    draw, so suppression uses no random numbers.
-2. **Miss distance for everyone else:** a round flies along the line of fire (LF). Any other agent in front of the
-   shooter, on either side, is passed at `m_b = √(m² + b²)`, with `b` its perpendicular distance from that ray. The
+2. **Miss distance for everyone else:** a round flies along the ray from the shooter through the target, out to the
+   weapon's maximum range. Any other agent in front of the shooter, on either side, is passed at `m_b = √(m² + b²)`, with `b` its perpendicular distance from that ray. The
    shooter itself is never passed.
 3. **Pressure from one round:** `p = S · exp(−m / r) · C` (or `m_b` for others), with **r = 2 m [PROPOSAL]**.
 4. **Cover `C`:** `C = T · Cover(posture)`, with T the forest transmission on the line from the shooter to that agent,
@@ -130,7 +136,9 @@ This replaces 0002's "a shot suppresses for 10 s".
    experience).
 6. **States:**
    - **Suppressed** when `L ≥ τ`; ends when `L` falls below `0.25 τ` **[PROPOSAL]**. The gap stops the state
-     flickering. Effects as in 0002: prone, stops moving, hit factor 0.3.
+     flickering. Effects as in 0002: prone, stops its order's movement, hit factor 0.3.
+   - **Lightly suppressed** is the lower part of it, `L < 2 τ` **[PROPOSAL]**: in the drill, the agent may still
+     crawl to cover or to a firing position. From `2 τ` up it stays where it is.
    - **Heavily suppressed** when `L ≥ 5 τ` **[PROPOSAL, kept high on purpose]**: as suppressed, and it does not fire
      at all. Against a regular or special-forces agent, sustained aimed rifle fire from one shooter levels off below it
      at any range (≈ 3.5 τ at 100 m for a regular). A conscript at close range can reach it.
@@ -152,32 +160,44 @@ Worked examples, regular agent standing in the open:
 ### Positions (CP)
 Two kinds of position, judged against every attacker the agent knows of (its attackers that are not out of action):
 - **Cover:** no attacker can see the agent there lying prone (0002 line of sight). The agent may not see them either.
-- **Firing position:** cover, and from there the agent sees an attacker when crouching, with a clear line of fire (LF)
-  to it: behind a low rise or at the edge of a forest.
+- **Firing position:** cover, and from there the agent sees an attacker when crouching, with a clear fire sector (LF)
+  towards it: behind a low rise or at the edge of a forest.
 
 The agent is **in danger of being hit** when an attacker can see it where it is, in its posture.
 
-A search looks within **20 m [PROPOSAL]** of where the agent is, on a **2 m grid [PROPOSAL]**, nearest first, ties by
-grid order, for points it can reach without crossing a hard boundary (v0.1 rules). The search is deterministic.
+A search looks within **20 m [PROPOSAL]** of where the agent is, on a **2 m grid [PROPOSAL]**, for points it can reach
+without crossing a hard boundary (v0.1 rules). The search is deterministic:
+- **Cover:** nearest first, ties by grid order.
+- **Firing position, forward by default:** first the points no farther from the attacker than the agent is now,
+  nearest first; only if there are none, the points behind. Ties by grid order.
+
+### Moving in the drill
+| Agent's state | Moves to cover or a firing position |
+|---|---|
+| Not suppressed | rushing, crouching **[PROPOSAL]** |
+| Lightly suppressed (`τ ≤ L < 2 τ`) | crawling, prone |
+| Suppressed from `2 τ`, or heavily | does not move |
+
+The agent re-checks after every tick, so it speeds up, slows down or stops as its pressure changes.
 
 ### The immediate action drill under fire (DR)
 An agent under `ReturnFire` or `FreeFire` without a `FireAt` order starts the drill when it comes under fire (SU7).
 Its current movement order is suspended. `ContactDrillStageChanged(agent, stage)` is logged at each stage. Every
-shot in the drill needs a clear line of fire (LF).
+shot in the drill needs a clear fire sector (LF).
 
 1. **Snap shots** (`SnapShots`): the agent drops prone at once. After its reaction time it fires **3** snap shots
    (decided) at the nearest attacker it sees (by sight or muzzle flash), one per snap interval. An attacker it cannot
    see, or cannot fire at, gets none. The stage ends after the third snap interval.
-2. **Into cover** (`MovingToCover`), as soon as the agent is not suppressed: if it is in danger of being hit and there
-   is cover within reach, it rushes there crouching **[PROPOSAL]**, without firing. Otherwise it skips this stage.
-3. **To a firing position** (`MovingToFiringPosition`): if it is not at a firing position and there is one within
-   reach, it moves there, crouching. Otherwise it skips this stage.
+2. **Into cover** (`MovingToCover`): if it is in danger of being hit and there is cover within reach, it moves there
+   as "Moving in the drill" allows, without firing. Otherwise it skips this stage.
+3. **To a firing position** (`MovingToFiringPosition`): if it is not at a firing position with a clear sector and
+   there is one within reach, it moves there, forward by default, as "Moving in the drill" allows, even out of cover.
+   Otherwise it skips this stage.
 4. **Return fire** (`ReturningFire`): aimed shots at the nearest attacker it sees clearly, crouching at a firing
    position or prone elsewhere; snap shots at an attacker seen only by its muzzle flash; no fire when it sees none or
-   its line of fire is not clear. An agent in cover without a firing position stays there and holds fire.
+   its sector is not clear. An agent in cover without a firing position stays there and holds fire.
 
-Whenever the agent is suppressed it goes prone and stops (0002), and carries on with its stage when the suppression
-ends. Heavily suppressed, it does not fire.
+Whenever the agent is suppressed it goes prone (0002). Heavily suppressed, it does not fire.
 
 **Waiting for orders:** at the end of stage 1 the agent reports contact, `ContactReported(agent, attacker, attacker
 position)`, and from then on waits for orders (`Unit.IsAwaitingOrders`) while it carries on with the drill. It does
@@ -190,7 +210,7 @@ may use the reserve.
 Unchanged from 0002: a `HoldFire` agent never fires on its own and does not run the drill; an agent with a `FireAt`
 order follows 0002 and its doctrine (`ReturnFireOverridesFireAt`).
 
-The drill's values (reaction times, snap shots, search radius, line-of-fire width, reserve) are kept as data in
+The drill's values (reaction times, snap shots, light-suppression limit, search radius, fire-sector angle, reserve) are kept as data in
 `Doctrine`, so a scenario can calibrate them without code changes.
 
 ### Event log (D)
@@ -223,13 +243,13 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | M4 | `M4_snap_shots_come_at_the_snap_interval` | consecutive snap shots are 0.7 s apart (± one tick) |
 | M5 | `M5_a_burst_is_one_shot_event_with_one_draw` | MG burst → one `ShotFired` with rounds = 5; P = 1 − (1 − p)^5 |
 
-### LF: line of fire (`LineOfFireTests.cs`)
+### LF: fire sector (`FireSectorTests.cs`)
 | ID | Test | Setup → expected |
 |---|---|---|
-| LF1 | `LF1_no_shot_is_fired_with_an_own_fighter_near_the_line_of_fire` | friend 3 m from the line, between shooter and enemy → no shot, under any rule or order |
-| LF2 | `LF2_a_friend_beyond_the_target_also_blocks_the_line_of_fire` | friend behind the enemy, 3 m from the ray → no shot |
-| LF3 | `LF3_a_friend_off_the_line_or_behind_the_shooter_does_not` | friends 6 m aside and 10 m behind → shots |
-| LF4 | `LF4_the_shooter_fires_once_the_line_clears` | friend walks off the line → first shot after it is 5 m clear |
+| LF1 | `LF1_no_shot_is_fired_with_an_own_fighter_within_thirty_degrees_of_the_muzzle` | friend 25° off the direction to the enemy, nearer than it → no shot, under any rule or order |
+| LF2 | `LF2_a_friend_beyond_the_target_inside_the_sector_also_blocks_fire` | friend behind the enemy, 10° off → no shot |
+| LF3 | `LF3_a_friend_outside_the_sector_or_behind_the_shooter_does_not` | friends 35° off and 10 m behind → shots |
+| LF4 | `LF4_the_shooter_fires_once_the_sector_clears` | friend walks out of the sector → first shot once it is past 30° |
 
 ### SU: suppression (`SuppressionModelTests.cs` pure, `SuppressionTests.cs` scenario)
 | ID | Test | Setup → expected |
@@ -258,8 +278,9 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | CP3 | `CP3_on_open_ground_there_is_neither` | flat open map → none |
 | CP4 | `CP4_the_nearest_position_within_twenty_meters_is_chosen` | rises at 8 m and 15 m → the 8 m one; one at 25 m → none |
 | CP5 | `CP5_a_position_behind_a_hard_boundary_is_not_chosen` | covered spot across a no-crossing road → not chosen |
-| CP6 | `CP6_a_position_without_a_clear_line_of_fire_is_not_a_firing_position` | team-mate near the line from it → not a firing position |
+| CP6 | `CP6_a_position_without_a_clear_fire_sector_is_not_a_firing_position` | team-mate within 30° of the direction from it to the attacker → not a firing position |
 | CP7 | `CP7_a_position_must_hide_the_agent_from_every_known_attacker` | two attackers, the rise covers from one only → not cover |
+| CP8 | `CP8_a_firing_position_forward_is_preferred_to_a_nearer_one_behind` | firing positions 12 m ahead and 6 m behind → the one ahead; only the one behind → it |
 
 ### DR: the drill (`ContactDrillTests.cs`)
 | ID | Test | Setup → expected |
@@ -269,14 +290,16 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | DR3 | `DR3_from_cover_it_moves_on_to_a_firing_position_and_fires_aimed_shots` | ridge at 8 m, low rise at 14 m → cover, then firing position, then aimed shots crouching |
 | DR4 | `DR4_in_cover_without_a_firing_position_it_holds_fire` | only the ridge → stays behind it, no aimed shots |
 | DR5 | `DR5_without_cover_nearby_it_stays_and_fires_aimed_shots` | open map → stays, aimed shots prone |
-| DR6 | `DR6_while_suppressed_it_neither_moves_nor_fires_aimed_shots` | sustained fire → prone in place until the suppression ends, then on to cover |
-| DR7 | `DR7_an_attacker_seen_only_by_its_muzzle_flash_gets_snap_shots_not_aimed_ones` | attacker in 90 m of forest → no aimed shots at it |
-| DR8 | `DR8_at_the_rear_of_a_wedge_it_does_not_fire_through_its_team_mates` | rear fighter under fire, team-mates on its line of fire → drill runs, no shots until it has a clear line |
-| DR9 | `DR9_it_reports_contact_and_waits_instead_of_resuming_its_corridor` | corridor order, fire stops → `ContactReported` once; off its corridor and waiting for orders 10 min later |
-| DR10 | `DR10_a_new_order_ends_the_wait` | `MoveThroughCorridor` while waiting → moves on, drill over |
-| DR11 | `DR11_a_hold_fire_agent_does_not_run_the_drill` | `HoldFire` → no shots, no `ContactReported`, behaves as in 0002 |
-| DR12 | `DR12_an_agent_with_a_fire_at_order_keeps_its_ordered_target` | ordered target engageable → no drill shots at the attacker |
-| DR13 | `DR13_fire_without_an_order_keeps_a_reserve_of_rounds` | 10 rounds → 8 fired in the drill, then none; a `FireAt` order fires the last 2 |
+| DR6 | `DR6_lightly_suppressed_it_crawls_to_cover` | pressure between τ and 2τ → moves prone at crawling speed |
+| DR7 | `DR7_more_heavily_suppressed_it_stays_where_it_is` | pressure above 2τ → no movement until it falls below 2τ, then crawls on |
+| DR8 | `DR8_it_leaves_cover_for_a_firing_position_when_suppression_allows` | ridge at 8 m, low rise 6 m farther forward → leaves the ridge for the rise |
+| DR9 | `DR9_an_attacker_seen_only_by_its_muzzle_flash_gets_snap_shots_not_aimed_ones` | attacker in 90 m of forest → no aimed shots at it |
+| DR10 | `DR10_at_the_rear_of_a_wedge_it_moves_forward_to_fire_past_its_team_mates` | rear fighter under fire, team-mates in its sector → no shots where it is; moves forward to a firing position with a clear sector, then fires |
+| DR11 | `DR11_it_reports_contact_and_waits_instead_of_resuming_its_corridor` | corridor order, fire stops → `ContactReported` once; off its corridor and waiting for orders 10 min later |
+| DR12 | `DR12_a_new_order_ends_the_wait` | `MoveThroughCorridor` while waiting → moves on, drill over |
+| DR13 | `DR13_a_hold_fire_agent_does_not_run_the_drill` | `HoldFire` → no shots, no `ContactReported`, behaves as in 0002 |
+| DR14 | `DR14_an_agent_with_a_fire_at_order_keeps_its_ordered_target` | ordered target engageable → no drill shots at the attacker |
+| DR15 | `DR15_fire_without_an_order_keeps_a_reserve_of_rounds` | 10 rounds → 8 fired in the drill, then none; a `FireAt` order fires the last 2 |
 
 ### D: determinism and log (`CombatDeterminismTests.cs`)
 | ID | Test | Setup → expected |
@@ -290,7 +313,8 @@ not a weakened test.
   SU4–SU6.
 - `EffectsTests.E6_each_new_shot_extends_suppression`: the 10 s rule. Replaced by SU6–SU7.
 - `EngagementTests.R9_agents_never_shoot_their_own_side`: its friend stands exactly on the line between shooter and
-  enemy and the test expects shots. Under LF there are none. Move the friend off the line (LF covers the on-line case).
+  enemy and the test expects shots. Under LF there are none. Move the friend out of the 60° sector (LF covers the
+  case inside it).
 - `DoctrineTests` permission answers while suppressed: they use `SuppressionSeconds`, which goes away. Re-expressed
   with "after `SuppressionEnded`".
 - `CombatDeterminismTests.D3`: the event fields change (becomes D4).
@@ -306,11 +330,10 @@ not a weakened test.
 - Assertions: `.BeHeavilySuppressed()`, `.BeInDrillStage(ContactDrillStage.ReturningFire)`, `.BeAwaitingOrders()`.
 
 ## Open questions
-1. **Rushing to cover:** crouching at half speed (proposal), standing at full speed, or crawling? Perhaps by distance:
-   crawl a few meters, rush farther.
-2. **Line-of-fire width:** is 5 m right, and should it grow with range (dispersion), for example 5 m + 10 mil · d?
-3. **Firing position farther than cover:** in stage 3, may the agent leave cover and cross ground where it is in
-   danger of being hit to reach a firing position (proposal: yes, if not suppressed), or only move under cover?
+1. **Light suppression limit:** is `2 τ` the right upper limit for crawling?
+2. **Rushing when not suppressed:** crouching at half speed (proposal), or standing at full speed?
+3. **The sector's reach:** a friend anywhere in the sector out to the weapon's range blocks fire (proposal). Should a
+   friend far beyond the target, or one lying in dead ground the rounds cannot reach, be ignored?
 
 ## Later tickets
 - `BreakContact` (irti) and `Hook` (haka) orders, and a scripted leader who gives them.
