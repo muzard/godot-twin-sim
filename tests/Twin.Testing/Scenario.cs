@@ -3,6 +3,7 @@ using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Geometry;
 using Twin.Sim.Movement;
+using Twin.Sim.Squads;
 using Twin.Sim.Terrain;
 
 namespace Twin.Testing;
@@ -21,7 +22,11 @@ public sealed class Scenario
     /// <summary>Default ground speed for test units: brisk infantry pace.</summary>
     public const double DefaultSpeedMps = 5.0;
 
+    /// <summary>Distance between squad members placed by <see cref="WithSquad"/>, in meters.</summary>
+    public const double SquadSpacingMeters = 3.0;
+
     private readonly List<(string Id, Vec2 At, double SpeedMps, MovementProfile? Profile, Combatant? Combatant)> _units = [];
+    private readonly List<SquadDefinition> _squads = [];
     private ITerrain _terrain = TestTerrain.Flat(1000);
     private SimulationConfig _config = new();
 
@@ -83,6 +88,38 @@ public sealed class Scenario
         string id, Vec2 at, Side side, RulesOfEngagement rules, WeaponProfile? weapon = null, string? unitId = null) =>
         WithUnit(id, at, SpecV01.Infantry, new Combatant(side, rules, weapon ?? SpecShooting.Rifle, unitId));
 
+    /// <summary>
+    /// Starts a squad scenario (backlog 0003): <see cref="ForCombat"/> plus the <see cref="SpecSquad.Doctrine"/> command
+    /// delays. dt = 0.5 s, so every spec delay is a whole number of ticks.
+    /// </summary>
+    public static Scenario ForSquad() => ForCombat().WithSquadDoctrine(SpecSquad.Doctrine);
+
+    /// <summary>
+    /// Places every member of <paramref name="squad"/> as a fighter (as <see cref="WithFighter"/>) and forms the squad
+    /// from them when the scenario is built. Members stand in a row, <see cref="SquadSpacingMeters"/> apart, eastward from
+    /// <paramref name="at"/> in the definition's member order. They hold fire unless <paramref name="rules"/> says
+    /// otherwise, so a test's shooting stays under its own control.
+    /// </summary>
+    public Scenario WithSquad(
+        SquadDefinition squad, Vec2 at, Side side = Side.Blue, RulesOfEngagement rules = RulesOfEngagement.HoldFire)
+    {
+        ArgumentNullException.ThrowIfNull(squad);
+        for (var i = 0; i < squad.Members.Count; i++)
+        {
+            WithFighter(squad.Members[i].UnitId, at + new Vec2(i * SquadSpacingMeters, 0), side, rules);
+        }
+
+        _squads.Add(squad);
+        return this;
+    }
+
+    /// <summary>Sets the squad command delays. Tests pass <see cref="SpecSquad.Doctrine"/>.</summary>
+    public Scenario WithSquadDoctrine(SquadDoctrine doctrine)
+    {
+        _config = _config with { SquadDoctrine = doctrine ?? throw new ArgumentNullException(nameof(doctrine)) };
+        return this;
+    }
+
     /// <summary>Sets the rules of line of sight, hits, posture and suppression. Tests pass <see cref="SpecShooting.Rules"/>.</summary>
     public Scenario WithCombatRules(CombatRules rules)
     {
@@ -142,6 +179,11 @@ public sealed class Scenario
             {
                 simulation.AddUnit(id, at, profile, combatant);
             }
+        }
+
+        foreach (var squad in _squads)
+        {
+            simulation.AddSquad(squad);
         }
 
         return new ScenarioRun(simulation);
