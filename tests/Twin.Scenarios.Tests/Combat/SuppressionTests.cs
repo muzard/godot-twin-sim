@@ -263,6 +263,27 @@ public class SuppressionTests
     }
 
     [Fact]
+    public void SU16_own_fire_neither_suppresses_nor_starts_the_drill()
+    {
+        // Decision of 2026-11-17: own rounds have no effect. Blue-1 fires at red; its rounds pass blue-2, 4 m off their
+        // path and 45° off blue-1's muzzle (outside the sector), well within the under-fire distance.
+        var sim = Scenario.ForCombat()
+            .WithTerrain(TestMap.Create(widthMeters: 160, heightMeters: 60).Build())
+            .WithFighter("blue-1", new Vec2(21, 21), Side.Blue, RulesOfEngagement.FreeFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
+            .WithFighter("blue-2", new Vec2(25, 25), Side.Blue, RulesOfEngagement.ReturnFire)
+            .WithFighter("red", new Vec2(121, 21), Side.Red, RulesOfEngagement.HoldFire)
+            .Build();
+
+        sim.RunFor(TimeSpan.FromSeconds(20));
+
+        Assert.NotEmpty(sim.ShotsBy("blue-1"));
+        Assert.Equal(0, sim.Unit("blue-2").SuppressionPressure);
+        Assert.Empty(EventsOf<ContactDrillStageChanged>(sim, "blue-2"));
+        Assert.DoesNotContain(sim.Events.OfType<ContactReported>(), e => e.AttackerId == "blue-1");
+        sim.Unit("blue-2").Should().BeIn(Posture.Standing).BeInDrillStage(ContactDrillStage.None);
+    }
+
+    [Fact]
     public void SU15_point_patrol_contact_does_not_pin_down_the_rear_of_the_wedge()
     {
         // A fire team in a wedge heads north; its point patrol is 100 m ahead. Red fires at the patrol from 200 m to

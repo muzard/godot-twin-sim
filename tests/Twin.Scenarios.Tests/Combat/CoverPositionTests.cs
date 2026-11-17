@@ -144,6 +144,23 @@ public class CoverPositionTests
     }
 
     [Fact]
+    public void CP5_cover_outside_the_forest_is_not_chosen_from_inside_it()
+    {
+        // ADR 0009: leaving forest crosses a hard boundary, and the drill has no permit. Blue stands in a forest strip
+        // (cells 56–70); the only cover, behind the building, is on open ground west of the strip.
+        var world = Strip(m => m
+            .Fill(TerrainClass.Forest, fromX: 57, fromY: 0, toX: 69, toY: 60)
+            .Fill(TerrainClass.Building, fromX: 55, fromY: 19, toX: 55, toY: 23));
+        var sim = Scenario.ForCombat().WithTerrain(world)
+            .WithFighter("blue", new Vec2(61, 21), Side.Blue, RulesOfEngagement.HoldFire)
+            .WithFighter("red", new Vec2(161, 21), Side.Red, RulesOfEngagement.HoldFire)
+            .Build();
+
+        Assert.True(sim.Simulation.CanSee("red", "blue"), "precondition: blue is exposed where it is");
+        Assert.Null(sim.Simulation.FindCover("blue", "red"));
+    }
+
+    [Fact]
     public void CP6_a_position_without_a_clear_fire_sector_is_not_a_firing_position()
     {
         // As CP2, but a team-mate stands between the rise and red: every spot behind the rise has him in its sector.

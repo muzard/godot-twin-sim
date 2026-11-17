@@ -1,6 +1,7 @@
 # 0003. Suppression as fire pressure, experience, and the immediate action drill under fire
 
-**Status:** proposal (2026-11-17), waiting for review before the spec phase. Builds on 0002 (shooting).
+**Status:** implemented (2026-11-17). Tests were written in the spec phase and reviewed before implementation. Builds
+on 0002 (shooting).
 
 ## Decisions
 Decided with the product owner on 2026-11-17.
@@ -40,6 +41,15 @@ Decided with the product owner on 2026-11-17.
   replaced along the chain of command (later ticket).
 - The drill keeps an ammunition reserve by default.
 - The drill's timings, the reserve and the weapon values need calibration. Weapon values are left open for now.
+
+**After the code review (2026-11-17)**
+- **A leader's order stands under fire.** Fire from an attacker already answered (by a drill, or by an order the
+  leader gave while it was firing) does not restart the drill; only fire from a new attacker does. (Before, the next
+  round restarted the drill and the order was lost.) Fire that only met a `FireAt` order, which keeps the drill from
+  starting, does not count as answered: once that order is done, the attacker's next round starts the drill.
+- **Own rounds have no effect:** they add no pressure and never put an agent under fire.
+- **A fallen team-mate still blocks the fire sector:** no fire towards one's own, out of action or not.
+- **ADR 0009 holds in the drill:** it has no permit, so it never leaves forest for cover or a firing position.
 
 Values marked **[PROPOSAL]** are starting values for review. As in 0002, tests read them from one place in
 `tests/Twin.Testing`, so calibration later does not change what a test checks.
@@ -130,7 +140,7 @@ This replaces 0002's "a shot suppresses for 10 s".
    `m = d · σ_M · σ_X · Q`, with d the range and σ_M in radians (1 mil = 0.001 rad). It is an expected value, not a
    draw, so suppression uses no random numbers.
 2. **Miss distance for everyone else:** a round flies along the ray from the shooter through the target, out to the
-   weapon's maximum range. Any other agent in front of the shooter, on either side, is passed at `m_b = √(m² + b²)`, with `b` its perpendicular distance from that ray. The
+   weapon's maximum range. Any other agent in front of the shooter, of the target's side (own rounds have no effect), is passed at `m_b = √(m² + b²)`, with `b` its perpendicular distance from that ray. The
    shooter itself is never passed.
 3. **Pressure from one round:** `p = S · exp(−m / r) · C` (or `m_b` for others), with **r = 2 m [PROPOSAL]**.
 4. **Cover `C`:** `C = T · Cover(posture)`, with T the forest transmission on the line from the shooter to that agent,
@@ -148,7 +158,8 @@ This replaces 0002's "a shot suppresses for 10 s".
 7. **Under fire:** an agent is under fire when it is the target of a shot, or a round passes it within
    **10 m [PROPOSAL]** (`m_b ≤ 10 m`) on a line from the shooter not blocked by ground or buildings (forest only
    attenuates). Being under fire adds the shooter to
-   its attackers (0002's duty to return fire) and starts the whole drill. Only hearing a shot does neither.
+   its attackers (0002's duty to return fire) and, if the shooter is a new attacker, starts the whole drill. Only
+   hearing a shot does neither.
 
 Worked examples, regular agent standing in the open:
 
@@ -170,7 +181,8 @@ Two kinds of position, judged against every attacker the agent knows of (its att
 The agent is **in danger of being hit** when an attacker can see it where it is, in its posture.
 
 A search looks within **20 m [PROPOSAL]** of where the agent is, on a **2 m grid [PROPOSAL]**, for points it can reach
-without crossing a hard boundary (v0.1 rules). The search is deterministic:
+without crossing a hard boundary (v0.1 rules), the forest edge of ADR 0009 included: the drill never leaves forest.
+The search is deterministic:
 - **Cover:** nearest first, ties by grid order.
 - **Firing position, forward by default:** first the points no farther from the attacker than the agent is now,
   nearest first; only if there are none, the points behind. Ties by grid order.
@@ -212,7 +224,13 @@ Whenever the agent is suppressed it goes prone (0002). Heavily suppressed, it do
 **Waiting for orders:** at the end of stage 1 the agent reports contact, `ContactReported(agent, attacker, attacker
 position)`, and from then on waits for orders (`Unit.IsAwaitingOrders`) while it carries on with the drill. It does
 **not** resume its suspended order by itself, however long it waits. Any new order (`MoveTo`, `MoveThroughCorridor`,
-`Stop`, `FireAt`, `CeaseFire`, later `BreakContact` and `Hook`) ends the drill.
+`Stop`, `FireAt`, `CeaseFire`, later `BreakContact` and `Hook`; not `SetPosture`) ends the drill and restores the
+posture the agent wanted before it. The order stands under continuing fire: only fire from a new attacker starts the
+drill again.
+
+An agent pinned by a hit stays in the drill but does nothing until the pin ends; its snap-shot time may be over by then.
+An attacker that appears while the drill runs is added to the agent's attackers and targets, but cover and firing
+positions are not searched again (a later ticket may).
 
 **Ammunition reserve:** fire without an order stops when **20 % [PROPOSAL]** of the rounds are left. A `FireAt` order
 may use the reserve.
@@ -220,8 +238,9 @@ may use the reserve.
 Unchanged from 0002: a `HoldFire` agent never fires on its own and does not run the drill; an agent with a `FireAt`
 order follows 0002 and its doctrine (`ReturnFireOverridesFireAt`).
 
-The drill's values (reaction times, snap shots, light-suppression limit, search radius, fire-sector angle, reserve) are kept as data in
-`Doctrine`, so a scenario can calibrate them without code changes.
+The drill's values (snap shots, search distance and grid, fire-sector angle, reserve) are kept as data in
+`Doctrine.Drill`, and the reaction times and the light-suppression limit in `SuppressionRules`, so a scenario can
+calibrate them without code changes.
 
 ### Event log (D)
 - `ShotFired(shooter, target, hit)` gains `mode` and `rounds`.
@@ -281,6 +300,7 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | SU13 | `SU13_a_fighter_beside_the_target_is_suppressed_less_than_the_target` | 3 aimed MG bursts at A from 100 m, B 3 m beside → A heavily suppressed, B only suppressed, and B's suppression ends sooner |
 | SU13 | `SU13_aimed_rifle_fire_at_the_target_does_not_suppress_a_fighter_beside_it` | aimed rifle fire at A for 30 s → B feels some pressure, never suppressed |
 | SU14 | `SU14_a_round_passing_within_ten_meters_starts_the_whole_drill` | B 3 m beside A → B logs `ContactDrillStageChanged` and its first snap shot targets the shooter |
+| SU16 | `SU16_own_fire_neither_suppresses_nor_starts_the_drill` | own rounds pass 4 m from a team-mate → no pressure, no drill |
 | SU15 | `SU15_point_patrol_contact_does_not_pin_down_the_rear_of_the_wedge` | wedge, point patrol fired on from 200 m → rear fighters never suppressed and no drill; they hear the shots |
 
 ### CP: positions (`CoverPositionTests.cs`, scenario: `Simulation.FindCover` and `FindFiringPosition`)
@@ -291,6 +311,7 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | CP3 | `CP3_on_open_ground_there_is_neither` | flat open map → none |
 | CP4 | `CP4_the_nearest_cover_within_twenty_meters_is_chosen` | cover from 8 m and from 18 m → the 8 m one |
 | CP4 | `CP4_cover_farther_than_twenty_meters_is_not_chosen` | cover only from 28 m → none |
+| CP5 | `CP5_cover_outside_the_forest_is_not_chosen_from_inside_it` | ADR 0009: cover only outside the forest → none |
 | CP5 | `CP5_a_position_behind_a_hard_boundary_is_not_chosen` | covered spot across a no-crossing road → not chosen |
 | CP6 | `CP6_a_position_without_a_clear_fire_sector_is_not_a_firing_position` | team-mate within 30° of the direction from it to the attacker → not a firing position |
 | CP7 | `CP7_a_position_must_hide_the_agent_from_every_known_attacker` | two attackers, the rise covers from one only → not cover |
@@ -313,6 +334,11 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | DR12 | `DR12_a_new_order_ends_the_wait` | `MoveThroughCorridor` while waiting → moves on, drill over |
 | DR13 | `DR13_a_hold_fire_agent_does_not_run_the_drill` | `HoldFire` → no shots, no `ContactReported`, behaves as in 0002 |
 | DR14 | `DR14_an_agent_with_a_fire_at_order_keeps_its_ordered_target` | ordered target engageable → no drill shots at the attacker |
+| DR16 | `DR16_a_new_order_under_continuing_fire_is_carried_out` | the known attacker keeps firing → the order is carried out, no new drill |
+| DR17 | `DR17_fire_from_a_new_attacker_restarts_the_drill` | a second enemy opens fire during the order → the drill starts again |
+| DR18 | `DR18_when_the_drill_ends_the_agent_takes_back_the_posture_it_wanted` | `Stop` after contact → standing again |
+| — | `KnownAttackerTests.An_attacker_whose_fire_met_only_a_fire_at_order_starts_the_drill_once_the_order_is_done` | the `FireAt` order's target falls → the attacker's next round starts the drill |
+| — | `KnownAttackerTests.A_fallen_team_mate_still_blocks_the_fire_sector` | team-mate out of action inside 30° → no fire |
 | DR15 | `DR15_fire_without_an_order_keeps_a_reserve_of_rounds` | 10 rounds → 8 fired in the drill, then none; a `FireAt` order fires the last 2 |
 
 ### D: determinism and log (`CombatDeterminismTests.cs`)
@@ -377,6 +403,42 @@ not a weakened test.
     `ContactReported`; `AgentSnapshot.HeavilySuppressed`, `.DrillStage`, `.AwaitingOrders`
   - `Unit`: `IsHeavilySuppressed`, `SuppressionPressure`, `DrillStage`, `IsAwaitingOrders`
   - `Simulation`: `FindCover`, `FindFiringPosition`
+
+## Implementation (2026-11-17)
+
+- **Code:**
+  - `src/Twin.Sim/Combat/Suppression.cs`: `Experience`, `FireMode`, `ObservationQuality`, `ContactDrillStage`,
+    `ExperienceValues`, `FireModeValues`, `SuppressionRules` and `SuppressionModel` (miss distance, pressure)
+  - `src/Twin.Sim/Command/ContactDrillRules.cs`, in `Doctrine.Drill`
+  - `src/Twin.Sim/Systems/CombatSystems.cs`: pressure decay and suppression states (`CombatStatusSystem`); target
+    choice in the drill, fire sector, reserve, bursts and pressure on the target and bystanders (`FireSystem`)
+  - `src/Twin.Sim/Systems/ContactDrillSystem.cs`: the drill's stages and movement; runs after movement, before firing;
+    the drill's state is `src/Twin.Sim/Units/ContactDrill.cs`
+  - `src/Twin.Sim/Systems/CoverSearch.cs`: cover, firing positions and the clear-sector fallback
+- **Pressure cutoff:** rounds passing an agent farther than 10 crack radii (20 m) are ignored: they would add less
+  than 1e-4 of their pressure, and skipping them saves a sight line per agent per shot.
+- **Positions are searched on a grid walk:** from the agent, over passable ground within slope and cliff limits and
+  without crossing the hard boundaries of its (suspended) corridor order, so the route goes round buildings. The
+  agent then follows that route.
+- **The drill drops the order** it suspends; its hard boundaries still bound the search. A new order ends the drill
+  and restores the posture the agent wanted before.
+- **The forest edge binds the drill** (ADR 0009); see "After the code review" in Decisions.
+- **Fire without an order never dips into the reserve,** not even with the end of a machine-gun burst: the burst is
+  cut short.
+- **After the code review** (decisions in "Decisions"): own rounds are skipped, only a new attacker starts the drill,
+  and the drill's grid walk never leaves forest. New tests: SU16, CP5 (forest), DR16–DR18. A second review found that
+  "known attacker" reached too far (fire that met only a `FireAt` order); attackers now count as answered only by a
+  drill or an order (`Unit.KnownAttackers`), tested in the new `KnownAttackerTests` (implement phase, new file).
+- **Search on a raster finer than the search grid** would only look at the grid points and could step over a thin
+  obstacle; it cannot happen with today's 2 m cells and 2 m grid.
+- **Not done, for later:** heavy suppression starts and ends at the same level, so fire hovering around it logs
+  repeated `SuppressionStarted` events; a gap like the one for plain suppression would need a new value.
+- **Two tests changed during implementation** (back in the spec phase, approved 2026-11-17): the fire sector made
+  their geometry wrong.
+  - `EngagementTests.R5`: bravo stood 16 m from red, 8° off charlie's line to red, so charlie may not fire. Bravo now
+    stands 90 m north of red, 37° off the line.
+  - `ContactDrillTests.DR14`: red-2 was inside red-1's sector (11° off its line to blue), so red-1 never fired.
+    Red-1 now fires from 150 m, with red-2 34° off its line.
 
 ## Open questions
 1. **Where a round's path ends:** it runs to the weapon's maximum range, so a fighter standing right behind the target

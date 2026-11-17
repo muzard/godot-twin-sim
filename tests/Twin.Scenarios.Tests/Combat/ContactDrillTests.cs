@@ -308,6 +308,66 @@ public class ContactDrillTests
         sim.RunUntil(s => s.Events.OfType<Arrived>().Any(e => e.AgentId == "blue"), TimeSpan.FromMinutes(10), "blue arrives");
     }
 
+    // Blue on return fire stands 500 m south of red, who keeps firing slowly (one round every 6 s, never a hit): blue
+    // runs the drill, but the fire levels off below its threshold (≈ 0.88), so blue is never suppressed and can move.
+    private static ScenarioRun UnderSlowFire()
+    {
+        var slow = SpecSuppression.NeverHits(SpecShooting.Rifle) with { SecondsPerShot = 6 };
+        return Scenario.ForCombat()
+            .WithTerrain(TestMap.Create(widthMeters: 200, heightMeters: 540).Build())
+            .WithFighter("blue", new Vec2(21, 21), Side.Blue, RulesOfEngagement.ReturnFire)
+            .WithFighter("red", new Vec2(21, 521), Side.Red, RulesOfEngagement.HoldFire, slow)
+            .WithFighter("red-2", new Vec2(121, 421), Side.Red, RulesOfEngagement.HoldFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
+            .Build()
+            .Order("red", new FireAt("blue"));
+    }
+
+    [Fact]
+    public void DR16_a_new_order_under_continuing_fire_is_carried_out()
+    {
+        // Decision of 2026-11-17: the leader's order stands. Fire from an attacker the agent already knows does not
+        // restart the drill.
+        var sim = UnderSlowFire();
+        sim.RunUntil(s => s.Events.OfType<ContactReported>().Any(), TimeSpan.FromSeconds(30), "blue reports contact");
+
+        sim.Order("blue", new MoveTo(new Vec2(171, 21))).Step();
+        var ordered = sim.TimeSeconds;
+        sim.RunUntil(s => s.Unit("blue").Position.Xy.DistanceTo(new Vec2(171, 21)) < 0.01, TimeSpan.FromMinutes(5), "blue arrives");
+
+        Assert.Contains(sim.ShotsBy("red"), s => s.Time > ordered);
+        Assert.DoesNotContain(sim.Events.OfType<ContactDrillStageChanged>(), e => e.AgentId == "blue" && e.Time > ordered);
+        sim.Unit("blue").Should().BeAt(new Vec2(171, 21), toleranceMeters: 0.01).BeInDrillStage(ContactDrillStage.None);
+    }
+
+    [Fact]
+    public void DR17_fire_from_a_new_attacker_restarts_the_drill()
+    {
+        var sim = UnderSlowFire();
+        sim.RunUntil(s => s.Events.OfType<ContactReported>().Any(), TimeSpan.FromSeconds(30), "blue reports contact");
+        sim.Order("blue", new MoveTo(new Vec2(171, 21))).RunFor(TimeSpan.FromSeconds(5));
+
+        sim.Order("red-2", new FireAt("blue"));
+        var shot = sim.RunUntil(s => s.ShotsBy("red-2").Any(), TimeSpan.FromSeconds(10), "red-2 fires").ShotsBy("red-2")[0];
+        sim.Step();
+
+        Assert.Contains(sim.Events.OfType<ContactDrillStageChanged>(),
+            e => e.AgentId == "blue" && e.Stage == ContactDrillStage.SnapShots && e.Time >= shot.Time);
+        sim.Unit("blue").Should().BeInDrillStage(ContactDrillStage.SnapShots).BeIn(Posture.Prone);
+    }
+
+    [Fact]
+    public void DR18_when_the_drill_ends_the_agent_takes_back_the_posture_it_wanted()
+    {
+        var sim = FiredOnce(World(600, building: false, rise: false), RedAt500);
+        sim.RunUntil(s => s.Events.OfType<ContactReported>().Any(), TimeSpan.FromSeconds(30), "blue reports contact");
+        sim.Unit("blue").Should().BeIn(Posture.Prone);
+
+        sim.Order("blue", new Stop()).RunFor(TimeSpan.FromSeconds(2));
+
+        sim.Unit("blue").Should().BeIn(Posture.Standing).BeInDrillStage(ContactDrillStage.None);
+        Assert.False(sim.Unit("blue").IsAwaitingOrders);
+    }
+
     [Fact]
     public void DR13_a_hold_fire_agent_does_not_run_the_drill()
     {
@@ -333,12 +393,13 @@ public class ContactDrillTests
     [Fact]
     public void DR14_an_agent_with_a_fire_at_order_keeps_its_ordered_target()
     {
-        // Blue is ordered to fire at red-2, 100 m east and in plain sight; red-1 fires at blue from 500 m north.
-        // Blue's rounds never hit, so its order lasts.
+        // Blue is ordered to fire at red-2, 100 m east and in plain sight; red-1 fires at blue from 150 m north. From
+        // red-1, red-2 is 34° off the line to blue, outside red-1's fire sector. Blue's rounds never hit, so its order
+        // lasts; red-1's fire suppresses blue, but not heavily, so blue keeps firing.
         var sim = Scenario.ForCombat()
-            .WithTerrain(TestMap.Create(widthMeters: 200, heightMeters: 540).Build())
+            .WithTerrain(TestMap.Create(widthMeters: 200, heightMeters: 200).Build())
             .WithFighter("blue", new Vec2(21, 21), Side.Blue, RulesOfEngagement.ReturnFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
-            .WithFighter("red-1", new Vec2(21, 521), Side.Red, RulesOfEngagement.HoldFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
+            .WithFighter("red-1", new Vec2(21, 171), Side.Red, RulesOfEngagement.HoldFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
             .WithFighter("red-2", new Vec2(121, 21), Side.Red, RulesOfEngagement.HoldFire)
             .Build()
             .Order("blue", new FireAt("red-2"))
