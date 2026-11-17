@@ -183,8 +183,8 @@ Two sides, shooting with line of sight, posture, suppression, hits, and rules fo
 | E2 | After 60 s it is wounded, resumes its order and moves at half speed. | Covered | `E2_…` |
 | E3 | A second hit, while pinned or while wounded, puts the agent out of action. | Covered | both `E3_…` |
 | E4 | An agent out of action does not move, shoot or ask, and takes no orders. | Covered | `E4_…`, `An_agent_out_of_action_takes_no_orders` |
-| E5 | A shot at an agent, hit or miss, suppresses it for 10 s: it goes prone, stops, and afterwards resumes its order and posture. | Covered | `E5_…` |
-| E6 | Each new shot restarts the 10 s. | Covered | `E6_…` |
+| E5 | Fire suppresses: the agent goes prone and stops. An agent that holds fire afterwards resumes its order and posture; one on return or free fire runs the drill under fire instead (backlog 0003). Since 0003 suppression depends on how close, how heavy and how much fire passes the agent (fire pressure), not a fixed 10 s. | Covered | `SuppressionTests` SU4–SU7, `ContactDrillTests` (backlog 0003) |
+| E6 | Sustained fire keeps the agent suppressed until after it stops. | Covered | `SU7_…` (backlog 0003) |
 | CA1 | A wounding hit is logged as a casualty at the agent's position. | Covered | `C8_a_wounding_hit_logs_a_casualty_with_its_position` |
 | CA2 | Nobody gives first aid yet (to be changed when care is built). | Covered | `C9_no_one_gives_aid_yet` |
 

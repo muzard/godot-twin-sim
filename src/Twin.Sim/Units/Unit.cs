@@ -95,8 +95,29 @@ public sealed class Unit
     /// <summary>Current posture.</summary>
     public Posture Posture { get; internal set; } = Posture.Standing;
 
-    /// <summary>True while a shot at the unit keeps it suppressed.</summary>
+    /// <summary>
+    /// True while the unit is suppressed (backlog 0003): from the moment its fire pressure reaches its threshold τ until
+    /// the pressure falls below the release fraction of τ (<see cref="SuppressionRules"/>).
+    /// </summary>
     public bool IsSuppressed { get; internal set; }
+
+    /// <summary>
+    /// True while the unit is heavily suppressed: pressure at the heavy factor times its threshold
+    /// (<see cref="SuppressionRules"/>). It does not fire at all.
+    /// </summary>
+    public bool IsHeavilySuppressed { get; internal set; }
+
+    /// <summary>
+    /// The fire pressure on the unit (backlog 0003): rounds passing close add to it, and it halves every half-life of
+    /// the unit's experience.
+    /// </summary>
+    public double SuppressionPressure { get; internal set; }
+
+    /// <summary>Where the unit is in the immediate action drill under fire (backlog 0003).</summary>
+    public ContactDrillStage DrillStage { get; internal set; }
+
+    /// <summary>True from the unit's contact report until a new order ends its drill.</summary>
+    public bool IsAwaitingOrders { get; internal set; }
 
     /// <summary>Rounds left for the weapon.</summary>
     public int RoundsLeft { get; internal set; }
@@ -131,8 +152,6 @@ public sealed class Unit
     /// <summary>When the posture change in progress completes; null when none is.</summary>
     internal double? PostureChangeUntil { get; set; }
 
-    internal double SuppressedUntil { get; set; }
-
     internal double PinnedUntil { get; set; }
 
     internal double NextShotTime { get; set; }
@@ -141,6 +160,15 @@ public sealed class Unit
 
     /// <summary>Agents that have shot at this one, in the order they first did (the duty to return fire).</summary>
     internal List<string> Attackers { get; } = [];
+
+    /// <summary>
+    /// Attackers already answered, by a drill under fire or by an order the leader gave while they were firing: their
+    /// fire does not start the drill again (backlog 0003, decision of 2026-11-17).
+    /// </summary>
+    internal List<string> KnownAttackers { get; } = [];
+
+    /// <summary>The drill under fire: when it started, its snap shots, its suspended order and where it is heading.</summary>
+    internal ContactDrill? Drill { get; set; }
 
     /// <summary>The activity to return to when a combat state (suppressed, pinned, changing posture) ends.</summary>
     internal UnitActivity ActivityBeforeCombat { get; set; }

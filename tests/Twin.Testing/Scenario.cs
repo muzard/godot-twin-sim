@@ -77,11 +77,33 @@ public sealed class Scenario
 
     /// <summary>
     /// Adds a fighter: spec v0.1 infantry with the <see cref="SpecShooting.Rifle"/> (or <paramref name="weapon"/>),
-    /// standing, on <paramref name="side"/> under <paramref name="rules"/>.
+    /// standing, on <paramref name="side"/> under <paramref name="rules"/>, a <see cref="Experience.Regular"/> soldier
+    /// unless <paramref name="experience"/> says otherwise (backlog 0003).
     /// </summary>
     public Scenario WithFighter(
-        string id, Vec2 at, Side side, RulesOfEngagement rules, WeaponProfile? weapon = null, string? unitId = null) =>
-        WithUnit(id, at, SpecV01.Infantry, new Combatant(side, rules, weapon ?? SpecShooting.Rifle, unitId));
+        string id, Vec2 at, Side side, RulesOfEngagement rules, WeaponProfile? weapon = null, string? unitId = null,
+        Experience experience = Experience.Regular) =>
+        WithUnit(id, at, SpecV01.Infantry, new Combatant(side, rules, weapon ?? SpecShooting.Rifle, unitId, experience));
+
+    /// <summary>
+    /// Adds a fire team of five in a wedge (kiila) with its point at <paramref name="apex"/>, heading
+    /// <paramref name="facing"/> (any length). The arms trail back at 45° on both sides, <paramref name="spacingMeters"/>
+    /// between neighbours: <c>{prefix}-1</c> at the point, <c>-2</c> and <c>-3</c> left and right behind it, <c>-4</c> and
+    /// <c>-5</c> left and right at the rear. All are fighters with the rifle in the unit <paramref name="idPrefix"/>.
+    /// </summary>
+    public Scenario WithWedge(
+        string idPrefix, Vec2 apex, Vec2 facing, double spacingMeters, Side side, RulesOfEngagement rules)
+    {
+        var forward = facing.Normalized();
+        var left = new Vec2(-forward.Y, forward.X);
+        var step = spacingMeters / Math.Sqrt(2);
+        WithFighter($"{idPrefix}-1", apex, side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-2", apex - (forward * step) + (left * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-3", apex - (forward * step) - (left * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-4", apex - (forward * 2 * step) + (left * 2 * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-5", apex - (forward * 2 * step) - (left * 2 * step), side, rules, unitId: idPrefix);
+        return this;
+    }
 
     /// <summary>Sets the rules of line of sight, hits, posture and suppression. Tests pass <see cref="SpecShooting.Rules"/>.</summary>
     public Scenario WithCombatRules(CombatRules rules)

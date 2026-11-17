@@ -61,7 +61,10 @@ public enum RulesOfEngagement
 /// <param name="SizeFactor">Multiplier on the hit probability against the agent.</param>
 public sealed record PostureValues(double EyeHeight, double AimHeight, double SpeedFactor, double SizeFactor);
 
-/// <summary>The rules of line of sight, hits, posture and suppression (backlog 0002).</summary>
+/// <summary>
+/// The rules of line of sight, hits and posture (backlog 0002); suppression follows <see cref="Suppression"/>
+/// (backlog 0003: fire pressure).
+/// </summary>
 /// <param name="Standing">Standing posture values.</param>
 /// <param name="Crouching">Crouching posture values.</param>
 /// <param name="Prone">Prone posture values.</param>
@@ -75,7 +78,6 @@ public sealed record PostureValues(double EyeHeight, double AimHeight, double Sp
 /// <param name="WoundedHitFactor">Multiplier on the hit probability of a wounded shooter.</param>
 /// <param name="WoundedSpeedFactor">Multiplier on the speed of a wounded agent.</param>
 /// <param name="PinnedSeconds">How long the first hit pins an agent.</param>
-/// <param name="SuppressionSeconds">How long a shot at an agent suppresses it.</param>
 public sealed record CombatRules(
     PostureValues Standing,
     PostureValues Crouching,
@@ -89,8 +91,7 @@ public sealed record CombatRules(
     double SuppressedHitFactor,
     double WoundedHitFactor,
     double WoundedSpeedFactor,
-    double PinnedSeconds,
-    double SuppressionSeconds)
+    double PinnedSeconds)
 {
     /// <summary>Backlog 0002 starting values.</summary>
     public static CombatRules Default { get; } = new(
@@ -106,10 +107,15 @@ public sealed record CombatRules(
         SuppressedHitFactor: 0.3,
         WoundedHitFactor: 0.5,
         WoundedSpeedFactor: 0.5,
-        PinnedSeconds: 60,
-        SuppressionSeconds: 10);
+        PinnedSeconds: 60);
 
-    /// <summary>Doctrine: rules decided by people, such as whether return fire beats a <c>FireAt</c> order.</summary>
+    /// <summary>Suppression as fire pressure, experience and fire modes (backlog 0003).</summary>
+    public SuppressionRules Suppression { get; init; } = SuppressionRules.Default;
+
+    /// <summary>
+    /// Doctrine: rules decided by people, such as whether return fire beats a <c>FireAt</c> order, and the immediate
+    /// action drill under fire.
+    /// </summary>
     public Doctrine Doctrine { get; init; } = Doctrine.Default;
 
     /// <summary>The values of a posture.</summary>
@@ -129,11 +135,15 @@ public sealed record CombatRules(
 /// <param name="Rounds">Rounds carried.</param>
 /// <param name="SoundRangeMeters">Shots are heard this far.</param>
 /// <param name="FlashSeconds">How long the muzzle flash makes the shooter easier to see; 0 for none.</param>
+/// <param name="SuppressionPerRound">S: how much a round passing close suppresses (calibre, crack, volume).</param>
+/// <param name="RoundsPerBurst">n: rounds in one shot event; 1 for a rifle.</param>
+/// <param name="SnapSecondsPerShot">Time between snap shots.</param>
 public sealed record WeaponProfile(
     double HitProbabilityAtZero, double HitFalloffMeters, double MaxRangeMeters, double SecondsPerShot, int Rounds,
-    double SoundRangeMeters, double FlashSeconds)
+    double SoundRangeMeters, double FlashSeconds, double SuppressionPerRound = 1.2, int RoundsPerBurst = 1,
+    double SnapSecondsPerShot = 0.7)
 {
-    /// <summary>Backlog 0002 infantry rifle.</summary>
+    /// <summary>Backlog 0002 infantry rifle, with the backlog 0003 suppression values.</summary>
     public static WeaponProfile Rifle { get; } = new(0.6, 150, 600, 2, 150, 1500, 2);
 }
 
@@ -142,4 +152,6 @@ public sealed record WeaponProfile(
 /// <param name="Rules">Its rules of engagement.</param>
 /// <param name="Weapon">Its weapon.</param>
 /// <param name="UnitId">Its fire team or squad, for the later casualty-care system; null if none.</param>
-public sealed record Combatant(Side Side, RulesOfEngagement Rules, WeaponProfile Weapon, string? UnitId = null);
+/// <param name="Experience">Its experience (backlog 0003); a regular soldier by default.</param>
+public sealed record Combatant(
+    Side Side, RulesOfEngagement Rules, WeaponProfile Weapon, string? UnitId = null, Experience Experience = Experience.Regular);
