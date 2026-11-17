@@ -74,6 +74,12 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 (backlog 0002) adds `ShotFired`, `ShotHeard`, `HealthChanged`, `CasualtyOccurred`, `SuppressionStarted`,
 `SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too.
 
+To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated
+time), writes the log to `replays/st1-Grant.jsonl` (ignored by Git), reads it back and prints every agent's state
+every 60 s of simulated time. Options: `--answer Grant|Deny|NoAnswer` (the scripted leader), `--every <seconds>`,
+`--out <file.jsonl>`, `--max-seconds <s>`. `./dev replay replays/st1-Grant.jsonl` only replays an existing log.
+Relative paths are relative to the repository root. The code is `src/Twin.Headless/ScenarioReplay.cs`.
+
 Choices made while implementing, beyond the tests:
 
 - A route that only touches a drawn hard boundary counts as crossing it (conservative).

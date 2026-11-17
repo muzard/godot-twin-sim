@@ -18,6 +18,9 @@ export_presets.cfg
 .claude/state/
 .claude/settings.local.json
 
+# Event logs written by ./dev replay
+replays/
+
 # OS
 .DS_Store
 Thumbs.db

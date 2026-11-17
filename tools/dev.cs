@@ -8,6 +8,8 @@
 //   ./dev format      apply code formatting
 //   ./dev phase       show the TDD phase; ./dev phase spec | implement to switch it
 //   ./dev run         run the headless simulation demo
+//   ./dev replay <scenario> run a scenario (e.g. st1), write its event log to replays/ and replay the log;
+//                     options --answer Grant|Deny|NoAnswer, --every <s>; a .jsonl path only replays that log
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)
@@ -25,6 +27,7 @@ return command switch
     "format" => Run("dotnet", ["format", "Twin.Core.slnf"]),
     "phase" => Phase(rest),
     "run" => Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", .. rest]),
+    "replay" => Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. rest]),
     "smoke" => Run("dotnet", ["test", "tests/Twin.Acceptance.Tests", "--nologo", "--logger", "console;verbosity=detailed", .. rest]),
     "docker-test" => DockerTest(),
     "prep" => Prep(rest),
@@ -160,7 +163,7 @@ int Phase(string[] a)
 
 int Help()
 {
-    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run|smoke|docker-test|prep>  (see tools/dev.cs for details)");
+    Console.WriteLine("Usage: ./dev <setup|test|check|format|phase|run|replay|smoke|docker-test|prep>  (see tools/dev.cs for details)");
     return 1;
 }
 

@@ -20,6 +20,7 @@ The world model is 2.5D: one ground height per map position (ADR 0004).
 | Show TDD phase | `./dev phase` |
 | Headless demo | `./dev run -- --seconds 60` |
 | Acceptance tests on real map data only | `./dev smoke` |
+| Run a scenario and replay its event log | `./dev replay st1 --answer Grant --every 60` |
 | Core tests in Docker, timed | `./dev docker-test` |
 | Map preprocessing toolbox (GDAL) | `./dev prep <command>` (see `prep/README.md`) |
 

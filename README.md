@@ -25,7 +25,8 @@ docs and agent skills (not public yet) ([ADR 0011](docs/adr/0011-shared-harness-
 Run the visual client: open `src/Twin.Client/project.godot` in Godot 4.7.2 .NET and press Play.
 Left click selects a unit, right click orders it to move, the mouse wheel zooms.
 
-Run the simulation without graphics: `./dev run -- --seconds 60`.
+Run the simulation without graphics: `./dev run -- --seconds 60`. Run a scenario from `scenarios/` and replay its
+event log: `./dev replay st1` (see `docs/smoke-test-1.md`).
 
 ## Repository map
 
