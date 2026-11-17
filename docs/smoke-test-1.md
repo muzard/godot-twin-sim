@@ -88,7 +88,12 @@ zone, centerline, hard boundaries), cliffs, the planned route, the trail walked 
 of the last second, casualties and the agents (color = health, flatter = lower posture, yellow edge = suppressed),
 with the latest events listed on the right. Keys: space play/pause, left/right −/+1 s (shift 10 s), up/down speed,
 home/end; wheel zooms, dragging pans, the slider at the bottom seeks. A log whose file name does not start with its
-scenario needs `--scenario <name>`.
+scenario needs `--scenario <name>`. The camera starts framed on where the agents start and the corridor.
+
+`./dev replay st1-combat` (add `--godot` to watch it) runs a built-in fire fight instead of a scenario file, because
+`scenario.json` holds one agent and no opponents: two fire teams of three under free fire with the backlog 0002 rifle,
+placed on the field of acceptance test K2 (`src/Twin.Headless/CombatDemo.cs`). It runs until one side has nobody in
+action or nobody has fired for 120 s, and writes `replays/st1-combat.jsonl`.
 
 Choices made while implementing, beyond the tests:
 

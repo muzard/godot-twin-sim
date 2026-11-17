@@ -15,7 +15,8 @@ namespace Twin.Client;
 /// </summary>
 public partial class ReplayLayer : Node2D
 {
-    private const double ShotVisibleSeconds = 1.0;
+    // As long as the rifle takes between shots (WeaponProfile.Rifle), so a firing agent keeps its line while playing fast.
+    private const double ShotVisibleSeconds = 2.0;
 
     private readonly IReadOnlyList<SimEvent> _events = [];
     private readonly Corridor? _corridor;

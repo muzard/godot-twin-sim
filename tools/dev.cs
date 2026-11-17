@@ -11,7 +11,8 @@
 //   ./dev replay <scenario> run a scenario (e.g. st1), write its event log to replays/ and replay the log;
 //                     options --answer Grant|Deny|NoAnswer, --every <s>, --out <file>, --max-seconds <s>;
 //                     a .jsonl path only replays that log; --godot opens the replay in the Godot client
-//                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it)
+//                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it);
+//                     ./dev replay st1-combat runs a built-in fire fight on st1 instead of a scenario
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)
@@ -138,10 +139,18 @@ int Replay(string[] a)
     {
         scenario = target;
         log = OptionValue(options, "--out") ?? string.Empty;
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
+        var isDemo = !Directory.Exists(Path.Combine(root, target)) && !Directory.Exists(Path.Combine(root, "scenarios", target));
+        if (isDemo)
+        {
+            // A built-in demo such as st1-combat: the part before the last '-' names its map.
+            scenario = name.Contains('-') ? name[..name.LastIndexOf('-')] : name;
+        }
+
         if (log.Length == 0)
         {
-            // Name the log here and hand it to the runner, so both use the same file.
-            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl); it rejects other answers.
+            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl, replays/<demo>.jsonl), passed
+            // to it so both use the same file. The runner rejects any other answer.
             var answer = OptionValue(options, "--answer")?.ToLowerInvariant() switch
             {
                 null or "grant" => "Grant",
@@ -149,8 +158,7 @@ int Replay(string[] a)
                 "noanswer" => "NoAnswer",
                 var other => other,
             };
-            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
-            log = Path.Combine("replays", $"{name}-{answer}.jsonl");
+            log = Path.Combine("replays", isDemo ? $"{name}.jsonl" : $"{name}-{answer}.jsonl");
             options.AddRange(["--out", log]);
         }
 
