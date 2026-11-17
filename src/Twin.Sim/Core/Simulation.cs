@@ -105,7 +105,8 @@ public sealed class Simulation
     /// <summary>
     /// Issues an order. It is validated immediately and takes effect at the start of the next tick.
     /// A new order replaces the unit's current order, except <see cref="SetPosture"/> and <see cref="CeaseFire"/>, which
-    /// keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). Units out of action take no orders.
+    /// keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). <see cref="Stop"/> ends the current order and
+    /// leaves the unit idle where it is, with no current order. Units out of action take no orders.
     /// </summary>
     /// <exception cref="OrderRejectedException">The unit does not exist or the order is invalid.</exception>
     public void Issue(string unitId, Order order)
@@ -167,6 +168,9 @@ public sealed class Simulation
                         CombatQueries.EndOrder(unit);
                     }
 
+                    break;
+                case Stop:
+                    CombatQueries.EndOrder(unit); // zero velocity, idle, no current order
                     break;
                 default:
                     CombatQueries.EndOrder(unit);

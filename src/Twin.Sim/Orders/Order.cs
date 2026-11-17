@@ -15,6 +15,14 @@ public abstract record Order;
 public sealed record MoveTo(Vec2 Destination) : Order;
 
 /// <summary>
+/// Halt where the unit is (backlog 0001). On the next tick the current order ends, including a
+/// <see cref="FireAt"/>, so the unit stops shooting too. The unit keeps no current order and has zero velocity.
+/// It becomes idle on that tick, or, if it is in a combat state (suppressed, pinned, changing posture), once that
+/// state ends. Accepted for an idle unit, where it has no effect.
+/// </summary>
+public sealed record Stop : Order;
+
+/// <summary>
 /// Move through a corridor to its last centerline point (spec v0.1): plan a route that respects the corridor and its
 /// hard boundaries, ask the leader for permission when the boundaries make the route too long, then follow it.
 /// </summary>

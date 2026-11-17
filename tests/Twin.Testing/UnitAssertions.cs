@@ -45,6 +45,10 @@ public sealed class UnitAssertions
     public UnitAssertions BeIdle() =>
         Check(_unit.IsIdle && _unit.Velocity == Vec3.Zero, "to be idle and stationary");
 
+    /// <summary>The unit has no current order ("order none" in diagnostics).</summary>
+    public UnitAssertions HaveNoOrder() =>
+        Check(_unit.CurrentOrder is null, $"to have no current order, but it has {_unit.CurrentOrder}");
+
     /// <summary>The unit is moving and its horizontal velocity points at <paramref name="destination"/>.</summary>
     public UnitAssertions BeMovingToward(Vec2 destination)
     {
