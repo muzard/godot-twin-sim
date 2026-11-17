@@ -82,9 +82,9 @@ Relative paths are relative to the repository root. The code is `src/Twin.Headle
 
 Add `--godot` to watch the run on the map: `./dev replay st1 --godot` (or `./dev replay replays/st1-Grant.jsonl --godot`)
 builds the client and opens `src/Twin.Client/Replay.tscn` in Godot (found through `GODOT`, `PATH` or
-`Godot_mono.app` in `/Applications` or `~/Applications`). The viewer runs no simulation: it rebuilds each moment from
+`Godot_mono.app` in `/Applications` or `~/Applications`; on Windows set `GODOT` to the Godot .NET executable). The viewer runs no simulation: it rebuilds each moment from
 the log with `EventReplay` and draws the terrain classes with relief and contours, the corridor (inner zone, soft
-zone, centerline, hard boundaries), cliffs, the planned route, the trail walked so far, permission requests, shots
+zone, centerline, hard boundaries), cliffs, the planned route, the trail walked so far, permission requests and their answers, shots
 of the last second, casualties and the agents (color = health, flatter = lower posture, yellow edge = suppressed),
 with the latest events listed on the right. Keys: space play/pause, left/right −/+1 s (shift 10 s), up/down speed,
 home/end; wheel zooms, dragging pans, the slider at the bottom seeks. A log whose file name does not start with its

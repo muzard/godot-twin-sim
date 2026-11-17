@@ -20,6 +20,8 @@ public partial class ReplayHost : Node2D
         "space: play/pause   left/right: -/+1 s (shift: 10 s)   up/down: speed   home/end: start/end   wheel: zoom   drag: pan";
 
     private const int EventLines = 14;
+    private const float MinZoom = 0.05f;
+    private const float MaxZoom = 40f;
 
     private IReadOnlyList<SimEvent> _events = [];
     private CoordinateMapper _mapper = null!;
@@ -64,7 +66,8 @@ public partial class ReplayHost : Node2D
 
         _log = HudLabel(hud, Vector2.Zero);
         _log.HorizontalAlignment = HorizontalAlignment.Right;
-        _slider = new HSlider { MinValue = 0, MaxValue = Math.Max(_end, 0.001), Step = 0 };
+        // No focus: a focused slider would take the arrow keys and home/end from the playback controls.
+        _slider = new HSlider { MinValue = 0, MaxValue = Math.Max(_end, 0.001), Step = 0, FocusMode = Control.FocusModeEnum.None };
         _slider.ValueChanged += value =>
         {
             if (!_updatingSlider)
@@ -156,10 +159,10 @@ public partial class ReplayHost : Node2D
 
                 break;
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp }:
-                _camera.Zoom *= 1.1f;
+                _camera.Zoom = ClampZoom(_camera.Zoom * 1.1f);
                 break;
             case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelDown }:
-                _camera.Zoom /= 1.1f;
+                _camera.Zoom = ClampZoom(_camera.Zoom / 1.1f);
                 break;
             case InputEventMouseMotion motion when (motion.ButtonMask & (MouseButtonMask.Left | MouseButtonMask.Middle)) != 0:
                 _camera.Position -= motion.Relative / _camera.Zoom;
@@ -245,9 +248,15 @@ public partial class ReplayHost : Node2D
         _log.Size = new Vector2(420, 0);
 
         // Fit the whole map between the status text and the timeline.
-        var fit = Math.Min((size.X - 40) / _mapSize.X, (size.Y - 200) / _mapSize.Y);
+        var fit = Math.Max(MinZoom, Math.Min((size.X - 40) / _mapSize.X, (size.Y - 200) / _mapSize.Y));
         _camera.Zoom = new Vector2(fit, fit);
         _camera.Position = _mapSize / 2 + new Vector2(0, -40 / fit);
+    }
+
+    private static Vector2 ClampZoom(Vector2 zoom)
+    {
+        var z = Math.Clamp(zoom.X, MinZoom, MaxZoom);
+        return new Vector2(z, z);
     }
 
     private static Label HudLabel(CanvasLayer hud, Vector2 position)

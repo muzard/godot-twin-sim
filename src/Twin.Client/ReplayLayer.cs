@@ -1,5 +1,6 @@
 using Godot;
 using Twin.Sim.Combat;
+using Twin.Sim.Command;
 using Twin.Sim.Corridors;
 using Twin.Sim.Events;
 using Twin.Sim.Geometry;
@@ -53,6 +54,7 @@ public partial class ReplayLayer : Node2D
         var font = ThemeDB.FallbackFont;
         var routes = new SortedDictionary<string, IReadOnlyList<Vec2>>(StringComparer.Ordinal);
         var trails = new SortedDictionary<string, List<Vector2>>(StringComparer.Ordinal);
+        var requests = new List<(string AgentId, string BoundaryId, Vec2 At, string State)>();
         var positions = Snapshot.Agents.ToDictionary(a => a.Id, a => a.Position.Xy, StringComparer.Ordinal);
         foreach (var e in _events)
         {
@@ -73,9 +75,13 @@ public partial class ReplayLayer : Node2D
                     trail.Add(_mapper.ToScreen(moved.Position.Xy));
                     break;
                 case PermissionRequested request:
-                    var at = _mapper.ToScreen(request.At);
-                    DrawCircle(at, 7f, new Color(1f, 0.55f, 0f));
-                    DrawString(font, at + new Vector2(9, -6), $"permission? {request.BoundaryId}", fontSize: 12, modulate: Colors.Black);
+                    requests.Add((request.AgentId, request.BoundaryId, request.At, "?"));
+                    break;
+                case PermissionAnswered answered:
+                    Settle(requests, answered.AgentId, answered.BoundaryId, answered.Answer.ToString());
+                    break;
+                case PermissionTimedOut timedOut:
+                    Settle(requests, timedOut.AgentId, timedOut.BoundaryId, "no answer");
                     break;
                 case ShotFired shot when time - e.Time <= ShotVisibleSeconds &&
                                          positions.TryGetValue(shot.AgentId, out var from) &&
@@ -92,6 +98,19 @@ public partial class ReplayLayer : Node2D
             }
         }
 
+        foreach (var request in requests)
+        {
+            var at = _mapper.ToScreen(request.At);
+            var color = request.State switch
+            {
+                "?" => new Color(1f, 0.55f, 0f),
+                nameof(LeaderAnswer.Grant) => new Color(0.1f, 0.6f, 0.2f),
+                _ => new Color(0.8f, 0.1f, 0.1f),
+            };
+            DrawCircle(at, 7f, color);
+            DrawString(font, at + new Vector2(9, -6), $"permission {request.BoundaryId}: {request.State}", fontSize: 12, modulate: Colors.Black);
+        }
+
         foreach (var (_, route) in routes)
         {
             DrawDashedLine(route, new Color(0.1f, 0.2f, 0.7f, 0.85f));
@@ -105,6 +124,15 @@ public partial class ReplayLayer : Node2D
         foreach (var agent in Snapshot.Agents)
         {
             DrawAgent(agent, font);
+        }
+    }
+
+    private static void Settle(List<(string AgentId, string BoundaryId, Vec2 At, string State)> requests, string agentId, string boundaryId, string state)
+    {
+        var index = requests.FindLastIndex(r => r.AgentId == agentId && r.BoundaryId == boundaryId && r.State == "?");
+        if (index >= 0)
+        {
+            requests[index] = requests[index] with { State = state };
         }
     }
 

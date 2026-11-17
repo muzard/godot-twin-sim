@@ -106,7 +106,12 @@ int Check()
 int Replay(string[] a)
 {
     var options = a.ToList();
-    var godot = options.Remove("--godot");
+    if (!options.Remove("--godot"))
+    {
+        return Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. options]);
+    }
+
+    // --scenario only names the map for the viewer; the headless runner does not take it.
     var scenarioIndex = options.IndexOf("--scenario");
     string? scenario = null;
     if (scenarioIndex >= 0 && scenarioIndex + 1 < options.Count)
@@ -116,35 +121,45 @@ int Replay(string[] a)
     }
 
     var target = options.FirstOrDefault() ?? string.Empty;
-    var logOnly = target.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase);
-    if (!(godot && logOnly))
-    {
-        // Exit code 2 means the run timed out; its log is still worth looking at.
-        var code = Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. options]);
-        if (!godot || code is not (0 or 2))
-        {
-            return code;
-        }
-    }
-
     string log;
-    if (logOnly)
+    if (target.EndsWith(".jsonl", StringComparison.OrdinalIgnoreCase))
     {
         log = target;
+        if (!File.Exists(Path.Combine(root, log)))
+        {
+            Console.WriteLine($"Log file not found: {log}");
+            return 1;
+        }
+
         var name = Path.GetFileNameWithoutExtension(target);
         scenario ??= name.Contains('-') ? name[..name.LastIndexOf('-')] : name;
     }
     else
     {
         scenario = target;
-        var answer = OptionValue(options, "--answer")?.ToLowerInvariant() switch
+        log = OptionValue(options, "--out") ?? string.Empty;
+        if (log.Length == 0)
         {
-            "deny" => "Deny",
-            "noanswer" => "NoAnswer",
-            _ => "Grant",
-        };
-        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
-        log = OptionValue(options, "--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl");
+            // Name the log here and hand it to the runner, so both use the same file.
+            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl); it rejects other answers.
+            var answer = OptionValue(options, "--answer")?.ToLowerInvariant() switch
+            {
+                null or "grant" => "Grant",
+                "deny" => "Deny",
+                "noanswer" => "NoAnswer",
+                var other => other,
+            };
+            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
+            log = Path.Combine("replays", $"{name}-{answer}.jsonl");
+            options.AddRange(["--out", log]);
+        }
+
+        // Exit code 2 means the run timed out; its log is still worth looking at.
+        var code = Run("dotnet", ["run", "--project", "src/Twin.Headless", "--", "replay", .. options]);
+        if (code is not (0 or 2))
+        {
+            return code;
+        }
     }
 
     var scenarioDir = Directory.Exists(Path.Combine(root, scenario)) ? scenario : Path.Combine("scenarios", scenario);

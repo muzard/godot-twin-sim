@@ -69,7 +69,9 @@ internal static class ScenarioReplay
         }
 
         var answerText = options.GetValueOrDefault("--answer") ?? nameof(LeaderAnswer.Grant);
-        if (!Enum.TryParse<LeaderAnswer>(answerText, ignoreCase: true, out var answer) || !Enum.IsDefined(answer))
+        // Names only: Enum.TryParse would also take "1", which is easy to mistype and names the log differently.
+        if (!Enum.GetNames<LeaderAnswer>().Contains(answerText, StringComparer.OrdinalIgnoreCase) ||
+            !Enum.TryParse<LeaderAnswer>(answerText, ignoreCase: true, out var answer))
         {
             Console.WriteLine($"Unknown --answer '{answerText}'. Use Grant, Deny or NoAnswer.");
             return 1;
