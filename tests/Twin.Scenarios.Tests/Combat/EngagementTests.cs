@@ -174,9 +174,11 @@ public class EngagementTests
     [Fact]
     public void R9_agents_never_shoot_their_own_side()
     {
-        var sim = Scenario.ForCombat().WithTerrain(Open())
+        // The friend is nearer than the enemy but 39° off the line to it: outside the 60° fire sector of backlog 0003,
+        // which forbids firing with a friend inside it (FireSectorTests). Until 0003 the friend stood on the line.
+        var sim = Scenario.ForCombat().WithTerrain(Open(height: 100))
             .WithFighter("blue", Blue, Side.Blue, RulesOfEngagement.FreeFire)
-            .WithFighter("blue-2", Blue + new Vec2(50, 0), Side.Blue, RulesOfEngagement.HoldFire)
+            .WithFighter("blue-2", Blue + new Vec2(50, 40), Side.Blue, RulesOfEngagement.HoldFire)
             .WithFighter("red", Blue + new Vec2(100, 0), Side.Red, RulesOfEngagement.HoldFire)
             .Build();
 

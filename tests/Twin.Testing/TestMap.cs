@@ -80,6 +80,17 @@ public sealed class TestMap
         return this;
     }
 
+    /// <summary>
+    /// Raises the ground by <paramref name="height"/> meters for cells whose center lies inside the rectangle (edges
+    /// included): a mound or a short rise, on top of the heights set so far.
+    /// </summary>
+    public TestMap WithMound(double fromX, double fromY, double toX, double toY, double height)
+    {
+        var below = _height;
+        _height = p => below(p) + (p.X >= fromX && p.X <= toX && p.Y >= fromY && p.Y <= toY ? height : 0);
+        return this;
+    }
+
     /// <summary>Creates the world.</summary>
     public RasterWorld Build()
     {

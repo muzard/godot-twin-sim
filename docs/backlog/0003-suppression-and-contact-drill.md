@@ -146,7 +146,8 @@ This replaces 0002's "a shot suppresses for 10 s".
      at all. Against a regular or special-forces agent, sustained aimed rifle fire from one shooter levels off below it
      at any range (≈ 3.5 τ at 100 m for a regular). A conscript at close range can reach it.
 7. **Under fire:** an agent is under fire when it is the target of a shot, or a round passes it within
-   **10 m [PROPOSAL]** (`m_b ≤ 10 m`) with a clear sight line from the shooter. Being under fire adds the shooter to
+   **10 m [PROPOSAL]** (`m_b ≤ 10 m`) on a line from the shooter not blocked by ground or buildings (forest only
+   attenuates). Being under fire adds the shooter to
    its attackers (0002's duty to return fire) and starts the whole drill. Only hearing a shot does neither.
 
 Worked examples, regular agent standing in the open:
@@ -173,6 +174,12 @@ without crossing a hard boundary (v0.1 rules). The search is deterministic:
 - **Cover:** nearest first, ties by grid order.
 - **Firing position, forward by default:** first the points no farther from the attacker than the agent is now,
   nearest first; only if there are none, the points behind. Ties by grid order.
+- **Fallback, no covered firing position [PROPOSAL]:** if the agent's fire sector is not clear where it is and no
+  covered firing position exists, it moves to the nearest point (forward first) from which it sees the attacker with a
+  clear sector, without cover. Otherwise a fighter behind team-mates in open terrain could never fire (DR10).
+
+The queries are `Simulation.FindCover(agentId, attackerIds…)` and `Simulation.FindFiringPosition(agentId,
+attackerIds…)`; they return null when there is none, and use the hard boundaries of the agent's corridor order.
 
 ### Moving in the drill
 | Agent's state | Moves to cover or a firing position |
@@ -235,7 +242,7 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | X2 | `X2_experience_scales_the_hit_probability` | factors 0.8, 1.0, 1.3 applied exactly |
 | X3 | `X3_special_forces_fire_their_first_snap_shot_sooner_than_conscripts` | same contact → first snap shot after 0.5 s and 2.0 s (± one tick) |
 | X4 | `X4_special_forces_are_harder_to_suppress` | the same fire suppresses a conscript but not a special-forces soldier |
-| X5 | `X5_special_forces_recover_from_suppression_sooner` | same pressure → suppression ends after H·log2(L / 0.25τ) for each |
+| X5 | `X5_suppression_lasts_by_experience` | one MG burst → suppression ends after H·log2(L / 0.25τ) for each level |
 
 ### M: fire modes (`FireModeTests.cs`)
 | ID | Test | Setup → expected |
@@ -244,7 +251,8 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | M2 | `M2_special_forces_at_close_range_land_hits_with_snap_shots` | statistical: SF at 25 m, hit rate ≈ 0.17 within ±4σ |
 | M3 | `M3_fire_at_orders_and_free_fire_engagements_are_aimed` | `ShotFired.mode == Aimed` |
 | M4 | `M4_snap_shots_come_at_the_snap_interval` | consecutive snap shots are 0.7 s apart (± one tick) |
-| M5 | `M5_a_burst_is_one_shot_event_with_one_draw` | MG burst → one `ShotFired` with rounds = 5; P = 1 − (1 − p)^5 |
+| M5 | `M5_a_burst_hits_when_any_of_its_rounds_would` | pure: P = 1 − (1 − p)^n |
+| M5 | `M5_a_burst_is_one_shot_event_of_five_rounds` | MG burst → one `ShotFired` with rounds = 5, 5 rounds used |
 
 ### LF: fire sector (`FireSectorTests.cs`)
 | ID | Test | Setup → expected |
@@ -252,6 +260,7 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | LF1 | `LF1_no_shot_is_fired_with_an_own_fighter_within_thirty_degrees_of_the_muzzle` | friend 25° off the direction to the enemy, nearer than it → no shot, under any rule or order |
 | LF2 | `LF2_a_friend_beyond_the_target_inside_the_sector_also_blocks_fire` | friend behind the enemy, 10° off → no shot |
 | LF3 | `LF3_a_friend_outside_the_sector_or_behind_the_shooter_does_not` | friends 35° off and 10 m behind → shots |
+| LF3 | `LF3_a_friend_beyond_the_weapons_range_does_not` | friend on the line at 620 m → shots |
 | LF4 | `LF4_the_shooter_fires_once_the_sector_clears` | friend walks out of the sector → first shot once it is past 30° |
 
 ### SU: suppression (`SuppressionModelTests.cs` pure, `SuppressionTests.cs` scenario)
@@ -270,16 +279,18 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 | SU11 | `SU11_suppression_draws_no_random_numbers` | in a fixed duel, a fresh generator with the same seed and the formula's P(hit) reproduces every hit |
 | SU12 | `SU12_a_round_passes_others_at_their_distance_from_its_path` | pure: m_b = √(m² + b²); nobody behind the shooter; a hidden bystander gets 0 |
 | SU13 | `SU13_a_fighter_beside_the_target_is_suppressed_less_than_the_target` | 3 aimed MG bursts at A from 100 m, B 3 m beside → A heavily suppressed, B only suppressed, and B's suppression ends sooner |
+| SU13 | `SU13_aimed_rifle_fire_at_the_target_does_not_suppress_a_fighter_beside_it` | aimed rifle fire at A for 30 s → B feels some pressure, never suppressed |
 | SU14 | `SU14_a_round_passing_within_ten_meters_starts_the_whole_drill` | B 3 m beside A → B logs `ContactDrillStageChanged` and its first snap shot targets the shooter |
 | SU15 | `SU15_point_patrol_contact_does_not_pin_down_the_rear_of_the_wedge` | wedge, point patrol fired on from 200 m → rear fighters never suppressed and no drill; they hear the shots |
 
-### CP: positions (`CoverPositionTests.cs`, pure)
+### CP: positions (`CoverPositionTests.cs`, scenario: `Simulation.FindCover` and `FindFiringPosition`)
 | ID | Test | Setup → expected |
 |---|---|---|
-| CP1 | `CP1_behind_a_high_ridge_is_cover_but_not_a_firing_position` | 3 m ridge → hidden prone, cannot see crouching |
+| CP1 | `CP1_behind_a_building_is_cover_but_not_a_firing_position` | building → hidden prone, cannot see red at any height |
 | CP2 | `CP2_behind_a_low_rise_is_a_firing_position` | 0.5 m rise → hidden prone, sees crouching |
 | CP3 | `CP3_on_open_ground_there_is_neither` | flat open map → none |
-| CP4 | `CP4_the_nearest_position_within_twenty_meters_is_chosen` | rises at 8 m and 15 m → the 8 m one; one at 25 m → none |
+| CP4 | `CP4_the_nearest_cover_within_twenty_meters_is_chosen` | cover from 8 m and from 18 m → the 8 m one |
+| CP4 | `CP4_cover_farther_than_twenty_meters_is_not_chosen` | cover only from 28 m → none |
 | CP5 | `CP5_a_position_behind_a_hard_boundary_is_not_chosen` | covered spot across a no-crossing road → not chosen |
 | CP6 | `CP6_a_position_without_a_clear_fire_sector_is_not_a_firing_position` | team-mate within 30° of the direction from it to the attacker → not a firing position |
 | CP7 | `CP7_a_position_must_hide_the_agent_from_every_known_attacker` | two attackers, the rise covers from one only → not cover |
@@ -290,12 +301,12 @@ Pure tests in `tests/Twin.Sim.Tests/Combat/`, scenario tests in `tests/Twin.Scen
 |---|---|---|
 | DR1 | `DR1_under_fire_the_agent_drops_prone_and_fires_three_snap_shots_after_its_reaction_time` | regular, not suppressed → prone at once; 3 snap shots from 1.5 s, 0.7 s apart |
 | DR2 | `DR2_in_danger_of_being_hit_it_first_moves_into_cover` | attacker sees it; ridge 8 m away → moves behind it crouching, no shots on the way |
-| DR3 | `DR3_from_cover_it_moves_on_to_a_firing_position_and_fires_aimed_shots` | ridge at 8 m, low rise at 14 m → cover, then firing position, then aimed shots crouching |
+| DR3 | `DR3_from_cover_it_moves_on_to_a_firing_position` | building and low rise → stages in order; cover, then the firing position, forward |
 | DR4 | `DR4_in_cover_without_a_firing_position_it_holds_fire` | only the ridge → stays behind it, no aimed shots |
 | DR5 | `DR5_without_cover_nearby_it_stays_and_fires_aimed_shots` | open map → stays, aimed shots prone |
 | DR6 | `DR6_lightly_suppressed_it_crawls_to_cover` | pressure between τ and 2τ → moves prone at crawling speed |
 | DR7 | `DR7_more_heavily_suppressed_it_stays_where_it_is` | pressure above 2τ → no movement until it falls below 2τ, then crawls on |
-| DR8 | `DR8_it_leaves_cover_for_a_firing_position_when_suppression_allows` | ridge at 8 m, low rise 6 m farther forward → leaves the ridge for the rise |
+| DR8 | `DR8_at_the_firing_position_it_fires_aimed_shots_crouching` | as DR3 → aimed shots from behind the rise, crouching |
 | DR9 | `DR9_an_attacker_seen_only_by_its_muzzle_flash_gets_snap_shots_not_aimed_ones` | attacker in 90 m of forest → no aimed shots at it |
 | DR10 | `DR10_at_the_rear_of_a_wedge_it_moves_forward_to_fire_past_its_team_mates` | rear fighter under fire, team-mates in its sector → no shots where it is; moves forward to a firing position with a clear sector, then fires |
 | DR11 | `DR11_it_reports_contact_and_waits_instead_of_resuming_its_corridor` | corridor order, fire stops → `ContactReported` once; off its corridor and waiting for orders 10 min later |
@@ -332,8 +343,48 @@ not a weakened test.
 - A `Scenario.WithWedge(...)` that places a fire team in a wedge.
 - Assertions: `.BeHeavilySuppressed()`, `.BeInDrillStage(ContactDrillStage.ReturningFire)`, `.BeAwaitingOrders()`.
 
+## Changes made while writing the tests (2026-11-17)
+
+- **Files:**
+  - `tests/Twin.Sim.Tests/Combat/`: `ExperienceTests`, `FireModeTests`, `SuppressionModelTests`
+  - `tests/Twin.Scenarios.Tests/Combat/`: `ExperienceTests`, `FireModeTests`, `FireSectorTests`, `SuppressionTests`,
+    `CoverPositionTests`, `ContactDrillTests`; D4 in `CombatDeterminismTests`
+  - re-specified: `EffectsTests` (E5 and E6 removed, replaced by SU4–SU7), `EngagementTests.R9` (friend moved out of
+    the sector), `DoctrineTests` (permission answers measured against `SuppressionEnded`; red's rounds never hit)
+- **CP tests are scenario tests:** positions depend on the agents, so they go through `Simulation.FindCover` and
+  `FindFiringPosition`, and each test also checks the returned point against the definition with 0002 line of sight.
+- **New proposal, fallback firing position** (see "Positions"): needed for DR10, a fighter behind team-mates in open
+  terrain.
+- **"Under fire"** is decided on a line not blocked by ground or buildings; forest only attenuates (DR9).
+- **Shooters that never hit:** `SpecSuppression.NeverHits(weapon)` sets the hit probability to 0. Pressure does not
+  depend on it, so suppression and the drill can be tested without casualties getting in the way.
+- **Guards that already hold today** (they describe what must not change, or what 0002 already does): X1, X2 for
+  regular, X3 for special forces, M3, LF3, SU4, SU10, SU11, CP3, CP4 (farther than 20 m), CP5, CP6, DR13, DR14.
+- **The 2 km scanning-range TODO has no test** in this ticket.
+- **Kit additions:** `SpecSuppression` (values and formulas), `WithFighter(..., experience)`, `WithWedge`,
+  `TestMap.WithMound`, `ScenarioRun.ShotsBy` and `PositionAt`, assertions `NotBeSuppressed`, `BeHeavilySuppressed`,
+  `NotBeHeavilySuppressed`, `BeInDrillStage`, `BeAwaitingOrders`. `SpecShooting.Rules` drops `SuppressionSeconds` and
+  carries `Suppression` and `Doctrine.Drill`; the rifle gets `SuppressionPerRound`, `RoundsPerBurst`,
+  `SnapSecondsPerShot`.
+- **API the tests need from `Twin.Sim`:**
+  - `Twin.Sim.Combat`: enums `Experience`, `FireMode`, `ObservationQuality`, `ContactDrillStage`; records
+    `ExperienceValues`, `FireModeValues`, `SuppressionRules`; `CombatRules.Suppression` (and no `SuppressionSeconds`);
+    `WeaponProfile(..., SuppressionPerRound, RoundsPerBurst, SnapSecondsPerShot)`; `Combatant(..., Experience)`;
+    `HitModel.Probability(..., shooterExperience, mode)` and `HitModel.BurstProbability`; static class
+    `SuppressionModel` with `MissDistance`, `MissDistanceBeside`, `RoundPressure`
+  - `Twin.Sim.Command`: `ContactDrillRules`, `Doctrine.Drill`
+  - events: `ShotFired.Mode` and `.Rounds`, `SuppressionStarted.Heavy` (no `Until`), `ContactDrillStageChanged`,
+    `ContactReported`; `AgentSnapshot.HeavilySuppressed`, `.DrillStage`, `.AwaitingOrders`
+  - `Unit`: `IsHeavilySuppressed`, `SuppressionPressure`, `DrillStage`, `IsAwaitingOrders`
+  - `Simulation`: `FindCover`, `FindFiringPosition`
+
 ## Open questions
-None as of 2026-11-17. The [PROPOSAL] values stand until calibration.
+1. **Where a round's path ends:** it runs to the weapon's maximum range, so a fighter standing right behind the target
+   on the same line gets almost the target's pressure. Rounds aimed at a prone target mostly strike the ground near
+   it. Should the path end at the target when the target is prone (or after a short distance)? The wedge test (SU15)
+   avoids the question by firing from the side.
+
+The [PROPOSAL] values stand until calibration.
 
 ## TODO
 - **Scanning range:** no agent scans beyond **2 km** (a magic number, to be calibrated). This covers the per-tick

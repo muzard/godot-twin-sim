@@ -63,6 +63,35 @@ public class CombatDeterminismTests
         }
     }
 
+    [Fact]
+    public void D4_suppression_drill_stage_and_waiting_rebuilt_from_the_log_match_the_live_state()
+    {
+        // Backlog 0003: both duellists come under fire and run the drill. The snapshot carries heavy suppression, the
+        // drill stage and waiting for orders, and the log alone must rebuild them.
+        var sim = Duel(seed: 1);
+        var live = new List<WorldSnapshot> { sim.Simulation.Snapshot() };
+        var steps = (int)(FiveMinutes.TotalSeconds * SpecV01.TickRateHz);
+        for (var i = 0; i < steps; i++)
+        {
+            sim.Step();
+            live.Add(sim.Simulation.Snapshot());
+        }
+
+        Assert.Contains(sim.Events, e => e is ContactDrillStageChanged);
+        Assert.Contains(sim.Events, e => e is ContactReported);
+        Assert.Contains(live, s => s.Agents.Any(a => a.DrillStage != ContactDrillStage.None));
+        Assert.Contains(live, s => s.Agents.Any(a => a.AwaitingOrders));
+        var log = EventLog.FromJsonLines(EventLog.ToJsonLines(sim.Events));
+        foreach (var expected in live)
+        {
+            var replayed = EventReplay.SnapshotAt(log, expected.TimeSeconds);
+            Assert.True(expected.Agents.SequenceEqual(replayed.Agents),
+                $"At t={expected.TimeSeconds} s live {Describe(expected)} but replayed {Describe(replayed)}");
+        }
+    }
+
     private static string Describe(WorldSnapshot snapshot) =>
-        string.Join("; ", snapshot.Agents.Select(a => $"{a.Id} {a.Activity} {a.Health} {a.Posture} suppressed={a.Suppressed} at {a.Position}"));
+        string.Join("; ", snapshot.Agents.Select(a =>
+            $"{a.Id} {a.Activity} {a.Health} {a.Posture} suppressed={a.Suppressed} heavy={a.HeavilySuppressed} " +
+            $"drill={a.DrillStage} awaiting={a.AwaitingOrders} at {a.Position}"));
 }

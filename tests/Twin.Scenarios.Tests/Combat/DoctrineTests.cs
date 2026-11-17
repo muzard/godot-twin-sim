@@ -58,7 +58,8 @@ public class DoctrineTests
     }
 
     // Blue must cross a road it may not cross without permission (no detour), so it asks at once. Red, 500 m away,
-    // keeps blue suppressed for 40 s; the leader answers after 20 s.
+    // fires for 40 s; from its third shot (backlog 0003: fire pressure) blue is suppressed until after the fire stops.
+    // The leader answers after 20 s. Red's rounds never hit: this is about suppression only.
     private static ScenarioRun AskingWhileSuppressed(Doctrine doctrine)
     {
         var a = new Vec2(51, 31);
@@ -69,7 +70,7 @@ public class DoctrineTests
             .WithLeader(LeaderAnswer.Grant, after: TimeSpan.FromSeconds(20), permitRadiusMeters: 10)
             .WithPermissionRules(threshold: SpecV01.PermissionThreshold, timeout: TimeSpan.FromSeconds(120))
             .WithFighter("blue", a, Side.Blue, RulesOfEngagement.HoldFire)
-            .WithFighter("red", new Vec2(551, 31), Side.Red, RulesOfEngagement.HoldFire)
+            .WithFighter("red", new Vec2(551, 31), Side.Red, RulesOfEngagement.HoldFire, SpecSuppression.NeverHits(SpecShooting.Rifle))
             .Build()
             .Order("blue", new MoveThroughCorridor(corridor))
             .Order("red", new FireAt("blue"));
@@ -88,10 +89,13 @@ public class DoctrineTests
         sim.RunUntil(s => s.Events.OfType<PermissionAnswered>().Any(), TimeSpan.FromMinutes(2), "answer handled");
 
         var request = sim.Events.OfType<PermissionRequested>().First();
-        Assert.True(request.Time + 20 < lastShot, "precondition: the leader answered while blue was suppressed");
+        var started = sim.Events.OfType<SuppressionStarted>().First(e => e.AgentId == "blue");
+        Assert.True(started.Time < request.Time + 20 && request.Time + 20 < lastShot,
+            "precondition: the leader answered while blue was suppressed");
+        var ended = sim.Events.OfType<SuppressionEnded>().First(e => e.AgentId == "blue");
         var answer = sim.Events.OfType<PermissionAnswered>().First();
-        Assert.True(answer.Time >= lastShot + SpecShooting.Rules.SuppressionSeconds - 1e-9,
-            $"answer handled at t={answer.Time}, before the suppression ended (last shot t={lastShot})");
+        Assert.True(answer.Time >= ended.Time - 1e-9,
+            $"answer handled at t={answer.Time}, before the suppression ended (t={ended.Time})");
     }
 
     [Fact]
