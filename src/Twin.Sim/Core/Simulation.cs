@@ -3,6 +3,7 @@ using Twin.Sim.Events;
 using Twin.Sim.Geometry;
 using Twin.Sim.Movement;
 using Twin.Sim.Orders;
+using Twin.Sim.Squads;
 using Twin.Sim.Systems;
 using Twin.Sim.Terrain;
 using Twin.Sim.Units;
@@ -22,6 +23,9 @@ public sealed class Simulation
     private readonly IReadOnlyList<ISimSystem> _systems;
     private readonly List<SimEvent> _events = [];
     private readonly SortedDictionary<string, AgentSnapshot> _logged = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, Squad> _squads = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, Squad> _squadOfUnit = new(StringComparer.Ordinal);
+    private int _lastCommandId;
 
     /// <summary>Creates a simulation over the given terrain.</summary>
     public Simulation(ITerrain terrain, SimulationConfig? config = null)
@@ -32,7 +36,7 @@ public sealed class Simulation
         Random = new DeterministicRandom(Config.Seed);
 
         // System order is part of the simulation's behaviour. Change it deliberately.
-        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new FireSystem()];
+        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new FireSystem(), new SquadSystem()];
     }
 
     /// <summary>The ground surface.</summary>
@@ -55,6 +59,9 @@ public sealed class Simulation
 
     /// <summary>Everything that has happened so far, in order (spec v0.1 event log; see <see cref="EventLog"/>).</summary>
     public IReadOnlyList<SimEvent> EventLog => _events;
+
+    /// <summary>All squads, ordered by id (backlog 0003).</summary>
+    public IReadOnlyCollection<Squad> Squads => _squads.Values;
 
     /// <summary>Places a ground unit on the map. Its height is taken from the terrain.</summary>
     public Unit AddUnit(string id, Vec2 position, double maxSpeedMps)
@@ -87,6 +94,32 @@ public sealed class Simulation
     }
 
     /// <summary>
+    /// Forms a squad from fighters already on the map (backlog 0003). Moves no one. Logs <see cref="SquadFormed"/>.
+    /// </summary>
+    /// <exception cref="ArgumentException">The squad is invalid (see <see cref="SquadDefinition"/>); nothing is changed.</exception>
+    public Squad AddSquad(SquadDefinition definition)
+    {
+        ArgumentNullException.ThrowIfNull(definition);
+        var (leaderId, teamLeaderIds) = ValidateSquad(definition);
+        var squad = new Squad(definition, leaderId, teamLeaderIds);
+        _squads.Add(squad.Id, squad);
+        foreach (var member in squad.Members)
+        {
+            _squadOfUnit.Add(member.UnitId, squad);
+        }
+
+        Log(new SquadFormed(TimeSeconds, leaderId, squad.Id, squad.Teams, teamLeaderIds));
+        return squad;
+    }
+
+    /// <summary>Gets a squad by id.</summary>
+    public Squad GetSquad(string id) =>
+        _squads.TryGetValue(id, out var squad) ? squad : throw new KeyNotFoundException($"No squad with id '{id}'.");
+
+    /// <summary>The squad <paramref name="unitId"/> belongs to, or null if it is in none.</summary>
+    public Squad? SquadOf(string unitId) => _squadOfUnit.GetValueOrDefault(unitId);
+
+    /// <summary>
     /// True if <paramref name="observerId"/> sees <paramref name="targetId"/> now: the line from its eyes to the target's
     /// aim point is clear and the forest transmission is high enough, lower while the target's muzzle flash lasts.
     /// </summary>
@@ -96,7 +129,10 @@ public sealed class Simulation
     public WorldSnapshot Snapshot() =>
         new(TimeSeconds, _units.Values
             .Select(u => new AgentSnapshot(u.Id, u.Position, u.Activity, u.Health, u.Posture, u.IsSuppressed))
-            .ToList());
+            .ToList())
+        {
+            Squads = _squads.Values.Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds])).ToList(),
+        };
 
     /// <summary>Gets a unit by id.</summary>
     public Unit GetUnit(string id) =>
@@ -104,9 +140,10 @@ public sealed class Simulation
 
     /// <summary>
     /// Issues an order. It is validated immediately and takes effect at the start of the next tick.
-    /// A new order replaces the unit's current order, except <see cref="SetPosture"/> and <see cref="CeaseFire"/>, which
-    /// keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). <see cref="Stop"/> ends the current order and
-    /// leaves the unit idle where it is, with no current order. Units out of action take no orders.
+    /// A new order replaces the unit's current order, except <see cref="SetPosture"/>, <see cref="SetSquadPosture"/> and
+    /// <see cref="CeaseFire"/>, which keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). <see cref="Stop"/>
+    /// ends the current order and leaves the unit idle where it is, with no current order. Squad orders go only to a
+    /// squad's leader. Units out of action take no orders.
     /// </summary>
     /// <exception cref="OrderRejectedException">The unit does not exist or the order is invalid.</exception>
     public void Issue(string unitId, Order order)
@@ -132,6 +169,11 @@ public sealed class Simulation
             throw new OrderRejectedException($"Unit '{unitId}' is not a fighter.");
         }
 
+        if (order is SetSquadPosture && SquadOf(unitId)?.LeaderId != unitId)
+        {
+            throw new OrderRejectedException($"Unit '{unitId}' does not lead a squad.");
+        }
+
         if (order is MoveTo move && !Terrain.Contains(move.Destination))
         {
             throw new OrderRejectedException($"Destination {move.Destination} is outside the map.");
@@ -155,12 +197,7 @@ public sealed class Simulation
             switch (order)
             {
                 case SetPosture posture:
-                    if (unit.DesiredPosture != posture.Posture)
-                    {
-                        unit.DesiredPosture = posture.Posture; // keeps the current order
-                        unit.PostureChangeUntil = null;        // a change in progress restarts toward the new posture
-                    }
-
+                    CombatQueries.WantPosture(unit, posture.Posture); // keeps the current order
                     break;
                 case CeaseFire:
                     if (unit.CurrentOrder is FireAt)
@@ -172,6 +209,11 @@ public sealed class Simulation
                 case Stop:
                     CombatQueries.EndOrder(unit); // zero velocity, idle, no current order
                     break;
+                case SetSquadPosture when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
+                    SquadSystem.Command(this, squad, unit, order); // keeps the current order
+                    break;
+                case SetSquadPosture:
+                    break; // the unit lost command of its squad after the order was issued
                 default:
                     CombatQueries.EndOrder(unit);
                     unit.CurrentOrder = order;
@@ -190,6 +232,108 @@ public sealed class Simulation
 
     /// <summary>Adds an event to the log. Systems call this; the time is the current simulated time.</summary>
     internal void Log(SimEvent e) => _events.Add(e);
+
+    /// <summary>A new squad command id, unique in the run.</summary>
+    internal int NextCommandId() => ++_lastCommandId;
+
+    private (string LeaderId, List<string> TeamLeaderIds) ValidateSquad(SquadDefinition definition)
+    {
+        static ArgumentException Invalid(SquadDefinition d, string why) => new($"Squad '{d.Id}': {why}", nameof(definition));
+
+        if (string.IsNullOrEmpty(definition.Id))
+        {
+            throw new ArgumentException("A squad needs an id.", nameof(definition));
+        }
+
+        if (_squads.ContainsKey(definition.Id))
+        {
+            throw Invalid(definition, "a squad with this id already exists.");
+        }
+
+        if (definition.Teams is not { Count: > 0 } || definition.Members is not { Count: > 0 })
+        {
+            throw Invalid(definition, "a squad needs teams and members.");
+        }
+
+        if (definition.Teams.Distinct(StringComparer.Ordinal).Count() != definition.Teams.Count)
+        {
+            throw Invalid(definition, "team names must be unique.");
+        }
+
+        var seen = new SortedSet<string>(StringComparer.Ordinal);
+        Side? side = null;
+        foreach (var member in definition.Members)
+        {
+            if (member is null)
+            {
+                throw Invalid(definition, "a member is missing (null).");
+            }
+
+            if (!seen.Add(member.UnitId))
+            {
+                throw Invalid(definition, $"'{member.UnitId}' is listed twice.");
+            }
+
+            if (!_units.TryGetValue(member.UnitId, out var unit))
+            {
+                throw Invalid(definition, $"no unit with id '{member.UnitId}'.");
+            }
+
+            if (unit.Combatant is not { } combatant)
+            {
+                throw Invalid(definition, $"'{member.UnitId}' is not a fighter.");
+            }
+
+            if (unit.Health == Health.OutOfAction)
+            {
+                throw Invalid(definition, $"'{member.UnitId}' is out of action.");
+            }
+
+            side ??= combatant.Side;
+            if (combatant.Side != side)
+            {
+                throw Invalid(definition, "all members must be on one side.");
+            }
+
+            if (_squadOfUnit.TryGetValue(member.UnitId, out var other))
+            {
+                throw Invalid(definition, $"'{member.UnitId}' is already in squad '{other.Id}'.");
+            }
+
+            if (!definition.Teams.Contains(member.Team, StringComparer.Ordinal))
+            {
+                throw Invalid(definition, $"'{member.UnitId}' is in team '{member.Team}', which the squad does not list.");
+            }
+        }
+
+        var leaders = definition.Members.Where(m => m.Role == SquadRole.SquadLeader).ToList();
+        if (leaders.Count != 1)
+        {
+            throw Invalid(definition, $"a squad needs exactly one squad leader, not {leaders.Count}.");
+        }
+
+        if (definition.Members.Count(m => m.Role == SquadRole.SecondInCommand) > 1)
+        {
+            throw Invalid(definition, "a squad has at most one second-in-command.");
+        }
+
+        var teamLeaders = new List<string>();
+        foreach (var team in definition.Teams)
+        {
+            var members = definition.Members.Where(m => m.Team == team).ToList();
+            var teamLeader = members
+                .Where(m => m.Role is SquadRole.SquadLeader or SquadRole.SecondInCommand or SquadRole.TeamLeader)
+                .ToList();
+            if (members.Count == 0 || teamLeader.Count != 1)
+            {
+                throw Invalid(definition, $"team '{team}' needs members and exactly one leader.");
+            }
+
+            teamLeaders.Add(teamLeader[0].UnitId);
+        }
+
+        return (leaders[0].UnitId, teamLeaders);
+    }
 
     private void CheckPlacement(string id, Vec2 position)
     {
@@ -313,6 +457,30 @@ public sealed class Simulation
             hash.Add(unit.IsSuppressed ? 1 : 0);
             hash.Add(unit.RoundsLeft);
             hash.Add(unit.CurrentOrder?.ToString() ?? "none");
+        }
+
+        foreach (var squad in _squads.Values)
+        {
+            hash.Add(squad.Id);
+            hash.Add(squad.LeaderId ?? "none");
+            foreach (var teamLeader in squad.TeamLeaderIds)
+            {
+                hash.Add(teamLeader ?? "none");
+            }
+
+            foreach (var delivery in squad.Deliveries)
+            {
+                hash.Add(delivery.UnitId);
+                hash.Add(delivery.CommandId);
+                hash.Add(delivery.Due);
+                hash.Add(delivery.RelayTo.Count);
+            }
+
+            foreach (var takeover in squad.TeamTakeovers.Append(squad.LeaderTakeover))
+            {
+                hash.Add(takeover?.UnitId ?? "none");
+                hash.Add(takeover?.Due ?? -1);
+            }
         }
 
         return hash.Value;

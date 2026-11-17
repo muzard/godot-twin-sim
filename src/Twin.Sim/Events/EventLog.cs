@@ -133,6 +133,26 @@ public static class EventLog
             case PostureChanged posture:
                 w.WriteString("posture", posture.Posture.ToString());
                 break;
+            case SquadFormed formed:
+                w.WriteString("squad", formed.SquadId);
+                WriteStrings(w, "teams", formed.Teams);
+                WriteStrings(w, "teamLeaders", formed.TeamLeaderIds);
+                break;
+            case CommandIssued issued:
+                w.WriteString("squad", issued.SquadId);
+                w.WriteNumber("commandId", issued.CommandId);
+                w.WriteString("command", issued.Command);
+                break;
+            case CommandReceived received:
+                w.WriteNumber("commandId", received.CommandId);
+                break;
+            case LeaderChanged leader:
+                w.WriteString("squad", leader.SquadId);
+                break;
+            case TeamLeaderChanged teamLeader:
+                w.WriteString("squad", teamLeader.SquadId);
+                w.WriteString("team", teamLeader.Team);
+                break;
             default:
                 throw new ArgumentException($"Unknown event type {e.GetType().Name}.", nameof(e));
         }
@@ -169,11 +189,30 @@ public static class EventLog
             nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.GetProperty("until").GetDouble()),
             nameof(SuppressionEnded) => new SuppressionEnded(time, agent),
             nameof(PostureChanged) => new PostureChanged(time, agent, Enum.Parse<Posture>(Text(j, "posture"))),
+            nameof(SquadFormed) => new SquadFormed(time, agent, Text(j, "squad"), Strings(j, "teams"), Strings(j, "teamLeaders")),
+            nameof(CommandIssued) => new CommandIssued(time, agent, Text(j, "squad"), j.GetProperty("commandId").GetInt32(), Text(j, "command")),
+            nameof(CommandReceived) => new CommandReceived(time, agent, j.GetProperty("commandId").GetInt32()),
+            nameof(LeaderChanged) => new LeaderChanged(time, agent, Text(j, "squad")),
+            nameof(TeamLeaderChanged) => new TeamLeaderChanged(time, agent, Text(j, "squad"), Text(j, "team")),
             _ => throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Unknown event type '{type}'.")),
         };
     }
 
     private static string Text(JsonElement j, string name) => j.GetProperty(name).GetString() ?? string.Empty;
+
+    private static List<string> Strings(JsonElement j, string name) =>
+        j.GetProperty(name).EnumerateArray().Select(e => e.GetString() ?? string.Empty).ToList();
+
+    private static void WriteStrings(Utf8JsonWriter w, string name, IReadOnlyList<string> values)
+    {
+        w.WriteStartArray(name);
+        foreach (var value in values)
+        {
+            w.WriteStringValue(value);
+        }
+
+        w.WriteEndArray();
+    }
 
     private static void WritePoint(Utf8JsonWriter w, string? name, Vec2 p)
     {
@@ -212,12 +251,15 @@ public static class EventReplay
     public const double TimeTolerance = 1e-9;
 
     /// <summary>
-    /// Every agent's position, activity, health, posture and suppression after all events up to <paramref name="timeSeconds"/>.
+    /// Every agent's position, activity, health, posture and suppression, and every squad's leaders, after all events up
+    /// to <paramref name="timeSeconds"/>. A leader out of action leaves its place empty until a successor takes over.
     /// </summary>
     public static WorldSnapshot SnapshotAt(IReadOnlyList<SimEvent> events, double timeSeconds)
     {
         ArgumentNullException.ThrowIfNull(events);
         var agents = new SortedDictionary<string, AgentSnapshot>(StringComparer.Ordinal);
+        var squads = new SortedDictionary<string, SquadSnapshot>(StringComparer.Ordinal);
+        var teams = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var e in events)
         {
             if (e.Time > timeSeconds + TimeTolerance)
@@ -225,6 +267,7 @@ public static class EventReplay
                 break;
             }
 
+            ApplySquadEvent(squads, teams, e);
             switch (e)
             {
                 case AgentPlaced placed:
@@ -253,6 +296,45 @@ public static class EventReplay
             }
         }
 
-        return new WorldSnapshot(timeSeconds, agents.Values.ToList());
+        return new WorldSnapshot(timeSeconds, agents.Values.ToList()) { Squads = squads.Values.ToList() };
+    }
+
+    private static void ApplySquadEvent(
+        SortedDictionary<string, SquadSnapshot> squads, SortedDictionary<string, List<string>> teams, SimEvent e)
+    {
+        switch (e)
+        {
+            case SquadFormed formed:
+                squads[formed.SquadId] = new SquadSnapshot(formed.SquadId, formed.AgentId, [.. formed.TeamLeaderIds]);
+                teams[formed.SquadId] = [.. formed.Teams];
+                break;
+            case LeaderChanged leader when squads.TryGetValue(leader.SquadId, out var squad):
+                squads[squad.Id] = squad with { LeaderId = leader.AgentId };
+                break;
+            case TeamLeaderChanged teamLeader when squads.TryGetValue(teamLeader.SquadId, out var squad):
+                var team = teams[squad.Id].IndexOf(teamLeader.Team);
+                if (team >= 0)
+                {
+                    var leaders = squad.TeamLeaderIds.ToArray();
+                    leaders[team] = teamLeader.AgentId;
+                    squads[squad.Id] = squad with { TeamLeaderIds = leaders };
+                }
+
+                break;
+            case HealthChanged { Health: Health.OutOfAction } casualty:
+                foreach (var id in squads.Keys.ToList())
+                {
+                    var s = squads[id];
+                    squads[id] = s with
+                    {
+                        LeaderId = s.LeaderId == casualty.AgentId ? null : s.LeaderId,
+                        TeamLeaderIds = s.TeamLeaderIds.Select(t => t == casualty.AgentId ? null : t).ToArray(),
+                    };
+                }
+
+                break;
+            default:
+                break;
+        }
     }
 }

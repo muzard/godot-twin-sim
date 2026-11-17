@@ -72,7 +72,10 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 `AgentPlaced`, `AgentMoved` (position after every step in which it changed), `ActivityChanged` and
 `PermissionTimedOut`, so `EventReplay` can rebuild the state at any step from the log alone (A4). Combat
 (backlog 0002) adds `ShotFired`, `ShotHeard`, `HealthChanged`, `CasualtyOccurred`, `SuppressionStarted`,
-`SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too.
+`SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too. Squads (backlog 0003)
+add `SquadFormed` (with the teams and their first leaders), `CommandIssued`, `CommandReceived`, `LeaderChanged` and
+`TeamLeaderChanged`; replay rebuilds each squad's leader and team leaders. A leader's place is empty from its
+`HealthChanged` to `OutOfAction` until its successor's change event.
 
 To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated
 time), writes the log to `replays/st1-Grant.jsonl` (ignored by Git), reads it back and prints every agent's state

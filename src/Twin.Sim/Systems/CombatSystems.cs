@@ -264,6 +264,19 @@ internal static class CombatQueries
         }
     }
 
+    /// <summary>
+    /// Makes <paramref name="posture"/> the unit's goal; <see cref="CombatStatusSystem"/> carries out the change. A change
+    /// in progress restarts toward the new posture.
+    /// </summary>
+    public static void WantPosture(Unit unit, Posture posture)
+    {
+        if (unit.DesiredPosture != posture)
+        {
+            unit.DesiredPosture = posture;
+            unit.PostureChangeUntil = null;
+        }
+    }
+
     /// <summary>Drops the unit prone at once, cancelling any posture change.</summary>
     public static void ForceProne(Simulation simulation, Unit unit)
     {
