@@ -71,19 +71,21 @@ The TDD phase is set by a human with `./dev phase spec|implement`. Hooks enforce
   records in `src/Twin.Sim/Orders`, validated in `Simulation.Issue`.
 - Package versions live only in `Directory.Packages.props`. Adding or upgrading a package is its own PR.
 
-## Shared harness (`harness/`)
+## Shared team knowledge (`matrix-docs`)
 
-`harness/` is a git submodule of the team's shared docs repository (`pvarki/matrix-docs`, not public yet):
-agent skills, best practices, research findings, and cross-project architecture and design. (ADR 0011)
+The team's shared knowledge lives in its own repository, `pvarki/matrix-docs` (not public yet): decisions,
+research, glossary, open questions and agent skills for all Project Matrix projects. It is not part of this
+repository and is not this repository's AI harness (hooks, TDD phase). Each person uses their own clone. (ADR 0012)
 
-- Start at `harness/README.md` and read what is relevant before designing something new or when a
-  question is not answered by this repository's own docs.
-- This file and `docs/adr/` win over the harness where they disagree. Say so if you notice a conflict.
-- Do not edit `harness/` from here. Propose changes in the harness repository; move the pin in its own PR.
-- It is optional: nothing in the build depends on it. If `harness/` is empty, run
-  `git submodule update --init harness`. If that fails you have no access to it: carry on without it
-  and say so; never guess its contents.
-- While the harness is private, do not copy its content into this public repository.
+- Setup, once per machine: clone `matrix-docs` (e.g. next to this repository) and set `MATRIX_DOCS` to its
+  path. Install its `matrix` plugin at user scope as its README describes. Keep the clone on `main`.
+- Read it with the `matrix-context` skill before designing something new, or when a question is not
+  answered by this repository's own docs. Record new findings with `matrix-capture` if the human agrees.
+- This file and `docs/adr/` win over `matrix-docs` where they disagree. Say so if you notice a conflict.
+- It is optional: nothing in the build, tests, hooks or CI depends on it. No clone and no access? Carry on
+  without it and say so; never guess its contents.
+- While `matrix-docs` is private, do not copy its content into this public repository. Findings you add
+  to it follow the data rules of ADR 0008.
 
 ## Definition of done
 
