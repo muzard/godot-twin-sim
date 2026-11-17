@@ -1,6 +1,6 @@
 # 0011. Shared AI harness as a git submodule
 
-- Status: Proposed
+- Status: Superseded by [0012](0012-shared-harness-as-plugin-and-clone.md) (never accepted; the submodule was removed)
 - Date: 2026-11-15
 
 ## Context

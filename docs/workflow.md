@@ -46,9 +46,9 @@ enforce it; with other tools it is a convention. In every case CI and code revie
 
 - Claude Code is our primary harness (ADR 0008). It reads `CLAUDE.md`, which imports `AGENTS.md`, and
   runs the hooks in `.claude/settings.json`. Other tools that read `AGENTS.md` work too, without hooks.
-- Shared skills, best practices, research and cross-project design live in the team's harness repository,
-  mounted at `harness/` (ADR 0011). Fetch it with `git submodule update --init harness`; update the pin
-  with `git submodule update --remote harness` and a `chore: bump harness` pull request. This
+- Shared skills, best practices, research and cross-project design live in the team's shared repository,
+  `pvarki/matrix-docs` (ADR 0012). Each person keeps their own clone and installs its `matrix` plugin at user
+  scope (setup in `AGENTS.md`). The `matrix-context` skill pulls the clone when it reads it. This
   repository's own rules win where the two disagree.
 - The person who opens a pull request owns every line in it, however it was written.
 - Keep agent sessions scoped to one ticket. Start a new session for a new ticket.
