@@ -88,15 +88,16 @@ public class EngagementTests
     [Fact]
     public void R5_free_fire_agent_engages_a_shooter_it_sees_only_by_its_muzzle_flash()
     {
-        // Red fires one round at bravo nearby. Charlie looks at red through 90 m of forest: hidden except while the
-        // muzzle flash lasts (2 s). The flash only matters to third parties, because a duelling pair sees each other
-        // through the same forest.
-        var world = TestMap.Create(widthMeters: 200, heightMeters: 40)
+        // Red fires one round at bravo, 90 m north of it in the open. Charlie looks at red through 90 m of forest: hidden
+        // except while the muzzle flash lasts (2 s). The flash only matters to third parties, because a duelling pair
+        // sees each other through the same forest. Bravo is 37° off charlie's line to red, outside its 60° fire sector
+        // (backlog 0003); until 0003 bravo stood 16 m from red, inside it.
+        var world = TestMap.Create(widthMeters: 200, heightMeters: 140)
             .Fill(TerrainClass.Forest, fromX: 20, fromY: 0, toX: 110, toY: 40)
             .Build();
         var sim = Scenario.ForCombat().WithTerrain(world)
             .WithFighter("red", new Vec2(11, 21), Side.Red, RulesOfEngagement.HoldFire, SpecShooting.Rifle with { Rounds = 1 })
-            .WithFighter("bravo", new Vec2(11, 5), Side.Blue, RulesOfEngagement.HoldFire)
+            .WithFighter("bravo", new Vec2(11, 111), Side.Blue, RulesOfEngagement.HoldFire)
             .WithFighter("charlie", new Vec2(131, 21), Side.Blue, RulesOfEngagement.FreeFire)
             .Build()
             .Order("red", new FireAt("bravo"));
@@ -174,9 +175,11 @@ public class EngagementTests
     [Fact]
     public void R9_agents_never_shoot_their_own_side()
     {
-        var sim = Scenario.ForCombat().WithTerrain(Open())
+        // The friend is nearer than the enemy but 39° off the line to it: outside the 60° fire sector of backlog 0003,
+        // which forbids firing with a friend inside it (FireSectorTests). Until 0003 the friend stood on the line.
+        var sim = Scenario.ForCombat().WithTerrain(Open(height: 100))
             .WithFighter("blue", Blue, Side.Blue, RulesOfEngagement.FreeFire)
-            .WithFighter("blue-2", Blue + new Vec2(50, 0), Side.Blue, RulesOfEngagement.HoldFire)
+            .WithFighter("blue-2", Blue + new Vec2(50, 40), Side.Blue, RulesOfEngagement.HoldFire)
             .WithFighter("red", Blue + new Vec2(100, 0), Side.Red, RulesOfEngagement.HoldFire)
             .Build();
 

@@ -8,10 +8,10 @@ using Twin.Testing;
 namespace Twin.Scenarios.Tests.Squad;
 
 /// <summary>
-/// Forming a squad (backlog 0003, S1: SQ1–SQ2). A squad is formed from agents already on the map: forming it gives each
-/// member a role, a team and an experience level, and gives the squad one leader and every team one leader. It does not
-/// move anyone (placing members in formation slots comes with squad movement, S2). Invalid squads are rejected when
-/// they are formed; squad orders go only to the squad's leader.
+/// Forming a squad (backlog 0004, S1: SQ1–SQ2). A squad is formed from agents already on the map: forming it gives each
+/// member a role and a team, and gives the squad one leader and every team one leader. A member's experience is its own
+/// as a fighter (backlog 0003). It does not move anyone (placing members in formation slots comes with squad movement,
+/// S2). Invalid squads are rejected when they are formed; squad orders go only to the squad's leader.
 /// </summary>
 public class SquadTests
 {
@@ -40,11 +40,11 @@ public class SquadTests
             .Build();
     }
 
-    private static SquadMember Leader(string id, string team = "one") => SpecSquad.Member(id, SquadRole.SquadLeader, team, Experience.Experienced);
+    private static SquadMember Leader(string id, string team = "one") => new(id, SquadRole.SquadLeader, team);
 
-    private static SquadMember TeamLeader(string id, string team) => SpecSquad.Member(id, SquadRole.TeamLeader, team, Experience.Experienced);
+    private static SquadMember TeamLeader(string id, string team) => new(id, SquadRole.TeamLeader, team);
 
-    private static SquadMember Rifleman(string id, string team = "one") => SpecSquad.Member(id, SquadRole.Rifleman, team, Experience.Experienced);
+    private static SquadMember Rifleman(string id, string team = "one") => new(id, SquadRole.Rifleman, team);
 
     private static SquadDefinition Definition(IReadOnlyList<string> teams, params SquadMember[] members) => new("s", teams, members);
 
@@ -65,7 +65,8 @@ public class SquadTests
         Assert.Equal(SpecSquad.ReferenceTeams, squad.Teams);
         foreach (var expected in SpecSquad.Reference().Members)
         {
-            Assert.Equal(expected, squad.Member(expected.UnitId));
+            Assert.Equal(expected.ToMember(), squad.Member(expected.UnitId));
+            Assert.Equal(expected.Experience, sim.Unit(expected.UnitId).Combatant?.Experience);
             Assert.Same(squad, sim.Simulation.SquadOf(expected.UnitId));
         }
     }
@@ -122,8 +123,8 @@ public class SquadTests
     public void SQ2_a_squad_with_two_seconds_in_command_is_rejected() =>
         FormingIsRejected(Definition(["one", "two", "three"],
             Leader("a"),
-            SpecSquad.Member("b", SquadRole.SecondInCommand, "two", Experience.Experienced),
-            SpecSquad.Member("c", SquadRole.SecondInCommand, "three", Experience.Experienced)));
+            new SquadMember("b", SquadRole.SecondInCommand, "two"),
+            new SquadMember("c", SquadRole.SecondInCommand, "three")));
 
     [Fact]
     public void SQ2_a_team_without_a_leader_is_rejected() =>
@@ -138,7 +139,7 @@ public class SquadTests
         FormingIsRejected(Definition(["one", "two"],
             Leader("a"),
             TeamLeader("b", "two"),
-            SpecSquad.Member("c", SquadRole.SecondInCommand, "two", Experience.Experienced)));
+            new SquadMember("c", SquadRole.SecondInCommand, "two")));
 
     [Fact]
     public void SQ2_a_member_of_an_unlisted_team_is_rejected() =>

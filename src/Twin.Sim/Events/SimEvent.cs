@@ -76,7 +76,10 @@ public sealed record Blocked(double Time, string AgentId, string Reason) : SimEv
 /// <param name="AgentId">The shooter.</param>
 /// <param name="TargetId">The agent it shot at.</param>
 /// <param name="Hit">True if the shot hit.</param>
-public sealed record ShotFired(double Time, string AgentId, string TargetId, bool Hit) : SimEvent(Time, AgentId);
+/// <param name="Mode">Aimed or snap (backlog 0003).</param>
+/// <param name="Rounds">Rounds in the shot: 1 for a rifle, the burst for a machine gun.</param>
+public sealed record ShotFired(
+    double Time, string AgentId, string TargetId, bool Hit, FireMode Mode = FireMode.Aimed, int Rounds = 1) : SimEvent(Time, AgentId);
 
 /// <summary>
 /// An agent heard a shot. The event records where the shooter was; v0.1 agents do not yet act on it (only on what
@@ -103,11 +106,14 @@ public sealed record HealthChanged(double Time, string AgentId, Health Health) :
 /// <param name="Health">Its health after the hit.</param>
 public sealed record CasualtyOccurred(double Time, string AgentId, Vec2 Position, Health Health) : SimEvent(Time, AgentId);
 
-/// <summary>A shot at an agent suppressed it, or extended its suppression.</summary>
+/// <summary>
+/// An agent's fire pressure reached its suppression threshold, or its suppression changed between plain and heavy
+/// (backlog 0003). It lasts until <see cref="SuppressionEnded"/>; when is not known in advance.
+/// </summary>
 /// <param name="Time">Simulated time.</param>
 /// <param name="AgentId">The agent.</param>
-/// <param name="Until">When the suppression ends unless extended.</param>
-public sealed record SuppressionStarted(double Time, string AgentId, double Until) : SimEvent(Time, AgentId);
+/// <param name="Heavy">True if it is heavily suppressed: it does not fire at all.</param>
+public sealed record SuppressionStarted(double Time, string AgentId, bool Heavy) : SimEvent(Time, AgentId);
 
 /// <summary>An agent is no longer suppressed.</summary>
 /// <param name="Time">Simulated time.</param>
@@ -120,7 +126,26 @@ public sealed record SuppressionEnded(double Time, string AgentId) : SimEvent(Ti
 /// <param name="Posture">The new posture.</param>
 public sealed record PostureChanged(double Time, string AgentId, Posture Posture) : SimEvent(Time, AgentId);
 
-/// <summary>A squad was formed (backlog 0003).</summary>
+/// <summary>
+/// An agent entered a stage of the immediate action drill under fire (backlog 0003); <see cref="ContactDrillStage.None"/>
+/// when the drill ends.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Stage">The new stage.</param>
+public sealed record ContactDrillStageChanged(double Time, string AgentId, ContactDrillStage Stage) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// An agent under fire reported contact to its leader (backlog 0003). From now on it waits for orders, until a new order
+/// ends its drill.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="AttackerId">The enemy it reports.</param>
+/// <param name="AttackerPosition">Where that enemy is.</param>
+public sealed record ContactReported(double Time, string AgentId, string AttackerId, Vec2 AttackerPosition) : SimEvent(Time, AgentId);
+
+/// <summary>A squad was formed (backlog 0004).</summary>
 /// <param name="Time">Simulated time.</param>
 /// <param name="AgentId">The squad's leader.</param>
 /// <param name="SquadId">The squad.</param>
@@ -130,7 +155,7 @@ public sealed record SquadFormed(
     double Time, string AgentId, string SquadId, IReadOnlyList<string> Teams, IReadOnlyList<string> TeamLeaderIds)
     : SimEvent(Time, AgentId);
 
-/// <summary>A squad's leader commanded its squad (backlog 0003). Members act on it later, each logging <see cref="CommandReceived"/>.</summary>
+/// <summary>A squad's leader commanded its squad (backlog 0004). Members act on it later, each logging <see cref="CommandReceived"/>.</summary>
 /// <param name="Time">Simulated time.</param>
 /// <param name="AgentId">The leader.</param>
 /// <param name="SquadId">The squad.</param>
@@ -173,15 +198,19 @@ public sealed record SquadSnapshot(string Id, string? LeaderId, IReadOnlyList<st
 /// <param name="Health">Its health.</param>
 /// <param name="Posture">Its posture.</param>
 /// <param name="Suppressed">True while it is suppressed.</param>
+/// <param name="HeavilySuppressed">True while it is heavily suppressed.</param>
+/// <param name="DrillStage">Its stage of the drill under fire.</param>
+/// <param name="AwaitingOrders">True from its contact report until a new order.</param>
 public readonly record struct AgentSnapshot(
     string Id, Vec3 Position, UnitActivity Activity, Health Health = Health.Unhurt, Posture Posture = Posture.Standing,
-    bool Suppressed = false);
+    bool Suppressed = false, bool HeavilySuppressed = false, ContactDrillStage DrillStage = ContactDrillStage.None,
+    bool AwaitingOrders = false);
 
 /// <summary>The state viewers show: every agent at one moment, ordered by id.</summary>
 /// <param name="TimeSeconds">Simulated time.</param>
 /// <param name="Agents">The agents, ordered by id.</param>
 public sealed record WorldSnapshot(double TimeSeconds, IReadOnlyList<AgentSnapshot> Agents)
 {
-    /// <summary>Every squad and who leads it and its teams, ordered by id (backlog 0003).</summary>
+    /// <summary>Every squad and who leads it and its teams, ordered by id (backlog 0004).</summary>
     public IReadOnlyList<SquadSnapshot> Squads { get; init; } = [];
 }

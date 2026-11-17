@@ -72,10 +72,12 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 `AgentPlaced`, `AgentMoved` (position after every step in which it changed), `ActivityChanged` and
 `PermissionTimedOut`, so `EventReplay` can rebuild the state at any step from the log alone (A4). Combat
 (backlog 0002) adds `ShotFired`, `ShotHeard`, `HealthChanged`, `CasualtyOccurred`, `SuppressionStarted`,
-`SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too. Squads (backlog 0003)
-add `SquadFormed` (with the teams and their first leaders), `CommandIssued`, `CommandReceived`, `LeaderChanged` and
-`TeamLeaderChanged`; replay rebuilds each squad's leader and team leaders. A leader's place is empty from its
-`HealthChanged` to `OutOfAction` until its successor's change event.
+`SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too. Backlog 0003 adds the
+fire mode and rounds to `ShotFired`, replaces `SuppressionStarted`'s `until` with `heavy`, and adds
+`ContactDrillStageChanged` and `ContactReported`; replay also rebuilds heavy suppression, the drill stage and waiting
+for orders. Squads (backlog 0004) add `SquadFormed` (with the teams and their first leaders), `CommandIssued`,
+`CommandReceived`, `LeaderChanged` and `TeamLeaderChanged`; replay rebuilds each squad's leader and team leaders. A
+leader's place is empty from its `HealthChanged` to `OutOfAction` until its successor's change event.
 
 To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated
 time), writes the log to `replays/st1-Grant.jsonl` (ignored by Git), reads it back and prints every agent's state
@@ -85,13 +87,20 @@ Relative paths are relative to the repository root. The code is `src/Twin.Headle
 
 Add `--godot` to watch the run on the map: `./dev replay st1 --godot` (or `./dev replay replays/st1-Grant.jsonl --godot`)
 builds the client and opens `src/Twin.Client/Replay.tscn` in Godot (found through `GODOT`, `PATH` or
-`Godot_mono.app` in `/Applications` or `~/Applications`; on Windows set `GODOT` to the Godot .NET executable). The viewer runs no simulation: it rebuilds each moment from
+`Godot_mono.app` in `/Applications` or `~/Applications`; on Windows set `GODOT` to the Godot .NET executable). `GODOT` may be
+a full path, `~/...`, a path relative to the directory you run `./dev` from, or on macOS the `.app` itself; if Godot cannot
+be started, `./dev` says which path it tried (installing Godot: `GODOT_README.md`). The viewer runs no simulation: it rebuilds each moment from
 the log with `EventReplay` and draws the terrain classes with relief and contours, the corridor (inner zone, soft
 zone, centerline, hard boundaries), cliffs, the planned route, the trail walked so far, permission requests and their answers, shots
 of the last second, casualties and the agents (color = health, flatter = lower posture, yellow edge = suppressed),
 with the latest events listed on the right. Keys: space play/pause, left/right −/+1 s (shift 10 s), up/down speed,
 home/end; wheel zooms, dragging pans, the slider at the bottom seeks. A log whose file name does not start with its
-scenario needs `--scenario <name>`.
+scenario needs `--scenario <name>`. The camera starts framed on where the agents start and the corridor.
+
+`./dev replay st1-combat` (add `--godot` to watch it) runs a built-in fire fight instead of a scenario file, because
+`scenario.json` holds one agent and no opponents: two fire teams of three under free fire with the backlog 0002 rifle,
+placed on the field of acceptance test K2 (`src/Twin.Headless/CombatDemo.cs`). It runs until one side has nobody in
+action or nobody has fired for 120 s, and writes `replays/st1-combat.jsonl`.
 
 Choices made while implementing, beyond the tests:
 

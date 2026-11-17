@@ -1,13 +1,23 @@
+using Twin.Sim.Combat;
 using Twin.Sim.Squads;
 
 namespace Twin.Testing;
 
 /// <summary>
-/// The starting values and the reference squad of backlog 0003 (squad), the counterpart of <see cref="SpecShooting"/>.
+/// The starting values and the reference squad of backlog 0004 (squad), the counterpart of <see cref="SpecShooting"/>.
 /// Tests pass these explicitly, so calibrating the simulation's defaults later does not change what a test checks.
 /// </summary>
 public static class SpecSquad
 {
+    /// <summary>
+    /// An experienced member (kokenut): a <see cref="Experience.Regular"/> fighter. Provisional mapping onto backlog
+    /// 0003's experience levels; see backlog 0004, "Experience unified with 0003".
+    /// </summary>
+    public const Experience Experienced = Experience.Regular;
+
+    /// <summary>An inexperienced member (kokematon): a <see cref="Experience.Conscript"/> fighter. Provisional, as above.</summary>
+    public const Experience Inexperienced = Experience.Conscript;
+
     /// <summary>An experienced member acts on a command 1 s after it reaches it.</summary>
     public const double ExperiencedReactionSeconds = 1;
 
@@ -20,7 +30,7 @@ public static class SpecSquad
     /// <summary>A successor takes over a squad or a team 5 s after its leader is out of action.</summary>
     public const double TakeoverSeconds = 5;
 
-    /// <summary>Command delays of backlog 0003: reaction 1 s / 3 s, relay 2 s, takeover 5 s.</summary>
+    /// <summary>Command delays of backlog 0004: reaction 1 s / 3 s, relay 2 s, takeover 5 s.</summary>
     public static SquadDoctrine Doctrine { get; } = new(
         ExperiencedReactionSeconds: ExperiencedReactionSeconds,
         InexperiencedReactionSeconds: InexperiencedReactionSeconds,
@@ -48,20 +58,20 @@ public static class SpecSquad
     /// <item><term>support</term><description>vj (second-in-command, experienced), kk (machine gunner, inexperienced), t1 (inexperienced)</description></item>
     /// </list>
     /// </summary>
-    public static SquadDefinition Reference(string squadId = "r1") => new(squadId, ReferenceTeams,
+    public static SquadSpec Reference(string squadId = "r1") => new(squadId, ReferenceTeams,
     [
-        Member("rj", SquadRole.SquadLeader, CommandTeam, Experience.Experienced),
-        Member("j1", SquadRole.Rifleman, CommandTeam, Experience.Inexperienced),
-        Member("j2", SquadRole.Rifleman, CommandTeam, Experience.Experienced),
-        Member("pj", SquadRole.TeamLeader, PointTeam, Experience.Inexperienced),
-        Member("k1", SquadRole.Rifleman, PointTeam, Experience.Inexperienced),
-        Member("k2", SquadRole.Rifleman, PointTeam, Experience.Experienced),
-        Member("vj", SquadRole.SecondInCommand, SupportTeam, Experience.Experienced),
-        Member("kk", SquadRole.MachineGunner, SupportTeam, Experience.Inexperienced),
-        Member("t1", SquadRole.Rifleman, SupportTeam, Experience.Inexperienced),
+        Member("rj", SquadRole.SquadLeader, CommandTeam, Experienced),
+        Member("j1", SquadRole.Rifleman, CommandTeam, Inexperienced),
+        Member("j2", SquadRole.Rifleman, CommandTeam, Experienced),
+        Member("pj", SquadRole.TeamLeader, PointTeam, Inexperienced),
+        Member("k1", SquadRole.Rifleman, PointTeam, Inexperienced),
+        Member("k2", SquadRole.Rifleman, PointTeam, Experienced),
+        Member("vj", SquadRole.SecondInCommand, SupportTeam, Experienced),
+        Member("kk", SquadRole.MachineGunner, SupportTeam, Inexperienced),
+        Member("t1", SquadRole.Rifleman, SupportTeam, Inexperienced),
     ]);
 
-    /// <summary>A squad member.</summary>
-    public static SquadMember Member(string unitId, SquadRole role, string team, Experience experience) =>
+    /// <summary>A squad member placed with the given experience.</summary>
+    public static SquadMemberSpec Member(string unitId, SquadRole role, string team, Experience experience) =>
         new(unitId, role, team, experience);
 }

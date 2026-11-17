@@ -77,9 +77,32 @@ public sealed class UnitAssertions
             $"to have ground speed {expectedMps} m/s, but it is {speed:0.###} m/s");
     }
 
-    /// <summary>The unit is suppressed: under fire within the suppression time, prone and not moving on.</summary>
+    /// <summary>
+    /// The unit is suppressed (backlog 0003): its fire pressure has reached its threshold and not yet fallen below a
+    /// quarter of it; it is prone and does not move on with its order.
+    /// </summary>
     public UnitAssertions BeSuppressed() =>
         Check(_unit.IsSuppressed && _unit.Activity == UnitActivity.Suppressed, "to be suppressed");
+
+    /// <summary>The unit is not suppressed.</summary>
+    public UnitAssertions NotBeSuppressed() =>
+        Check(!_unit.IsSuppressed, "not to be suppressed");
+
+    /// <summary>The unit is heavily suppressed (backlog 0003): pressure at five times its threshold; it does not fire at all.</summary>
+    public UnitAssertions BeHeavilySuppressed() =>
+        Check(_unit.IsSuppressed && _unit.IsHeavilySuppressed, "to be heavily suppressed");
+
+    /// <summary>The unit is not heavily suppressed (it may still be suppressed).</summary>
+    public UnitAssertions NotBeHeavilySuppressed() =>
+        Check(!_unit.IsHeavilySuppressed, "not to be heavily suppressed");
+
+    /// <summary>The unit is in the given stage of the immediate action drill under fire (backlog 0003).</summary>
+    public UnitAssertions BeInDrillStage(ContactDrillStage expected) =>
+        Check(_unit.DrillStage == expected, $"to be in drill stage {expected}");
+
+    /// <summary>The unit has reported contact and waits for the leader's orders (backlog 0003).</summary>
+    public UnitAssertions BeAwaitingOrders() =>
+        Check(_unit.IsAwaitingOrders, "to be waiting for orders");
 
     /// <summary>The unit has the given health state.</summary>
     public UnitAssertions HaveHealth(Health expected) =>
@@ -91,7 +114,8 @@ public sealed class UnitAssertions
 
     internal static string DescribeUnit(Unit u) =>
         $"  unit '{u.Id}': position {u.Position}, velocity {u.Velocity}, activity {u.Activity}, " +
-        $"health {u.Health}, posture {u.Posture}, order {u.CurrentOrder?.ToString() ?? "none"}";
+        $"health {u.Health}, posture {u.Posture}, pressure {u.SuppressionPressure:0.###}, drill {u.DrillStage}, " +
+        $"awaiting orders {u.IsAwaitingOrders}, rounds {u.RoundsLeft}, order {u.CurrentOrder?.ToString() ?? "none"}";
 
     private UnitAssertions Check(bool condition, string expectation)
     {

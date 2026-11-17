@@ -22,6 +22,9 @@ public enum PermissionAnswerTiming
 public sealed record Doctrine(
     bool ReturnFireOverridesFireAt = true, PermissionAnswerTiming PermissionAnswers = PermissionAnswerTiming.WhenFree)
 {
+    /// <summary>The immediate action drill under fire (backlog 0003).</summary>
+    public ContactDrillRules Drill { get; init; } = ContactDrillRules.Default;
+
     /// <summary>The decisions of 2026-11-09: the duty to return fire wins; answers are handled when the agent is free.</summary>
     public static Doctrine Default { get; } = new();
 }

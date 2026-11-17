@@ -3,7 +3,7 @@ using Twin.Sim.Orders;
 namespace Twin.Sim.Squads;
 
 /// <summary>
-/// A squad in the simulation (backlog 0003): its members and who leads it and each of its teams now. Formed with
+/// A squad in the simulation (backlog 0004): its members and who leads it and each of its teams now. Formed with
 /// <see cref="Simulation.AddSquad"/>; <see cref="Systems.SquadSystem"/> carries commands through it and fills a leader's
 /// place when the leader is out of action.
 /// </summary>

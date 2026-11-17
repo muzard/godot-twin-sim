@@ -7,7 +7,7 @@ using Twin.Testing;
 namespace Twin.Scenarios.Tests.Squad;
 
 /// <summary>
-/// Succession (backlog 0003, S1: SQ5). When the squad leader is out of action, the second-in-command takes command
+/// Succession (backlog 0004, S1: SQ5). When the squad leader is out of action, the second-in-command takes command
 /// after the takeover time (5 s) and keeps leading its own team; until then the squad has no leader and takes no squad
 /// orders. The command team gets its next member as its leader. If the second-in-command is out too, the point team's
 /// leader takes command. (Passing the squad's movement order and permits to the new leader is tested with squad

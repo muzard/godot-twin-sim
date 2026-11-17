@@ -7,7 +7,7 @@ using Twin.Testing;
 namespace Twin.Scenarios.Tests.Squad;
 
 /// <summary>
-/// Determinism and the event log with a squad (backlog 0003, S1: SQ6). The same seed gives the same log byte for byte,
+/// Determinism and the event log with a squad (backlog 0004, S1: SQ6). The same seed gives the same log byte for byte,
 /// and the squads' leaders and team leaders can be rebuilt from the log at every step, as agents can (A4, D3).
 /// The run: the squad leader orders the squad down, then red shoots it out of action and the second-in-command takes
 /// command.

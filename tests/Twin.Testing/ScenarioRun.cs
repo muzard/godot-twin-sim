@@ -44,6 +44,26 @@ public sealed class ScenarioRun
     /// <summary>Looks up a unit.</summary>
     public Unit Unit(string id) => Simulation.GetUnit(id);
 
+    /// <summary>Every shot <paramref name="shooterId"/> has fired so far, in order.</summary>
+    public IReadOnlyList<ShotFired> ShotsBy(string shooterId) =>
+        Events.OfType<ShotFired>().Where(e => e.AgentId == shooterId).ToList();
+
+    /// <summary>
+    /// Where a unit was (horizontally) after the tick at simulated time <paramref name="timeSeconds"/>, from its trail.
+    /// Time 0 is the position when the run was built.
+    /// </summary>
+    public Vec2 PositionAt(string unitId, double timeSeconds)
+    {
+        var trail = Trail(unitId);
+        var index = (int)Math.Round(timeSeconds * Simulation.Config.TickRateHz);
+        if (index < 0 || index >= trail.Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(timeSeconds), $"No position of '{unitId}' recorded at t={timeSeconds} s.");
+        }
+
+        return trail[index];
+    }
+
     /// <summary>Issues an order; it takes effect on the next tick.</summary>
     public ScenarioRun Order(string unitId, Order order)
     {
@@ -102,7 +122,7 @@ public sealed class ScenarioRun
         return Events.OfType<ShotFired>().First(e => e.TargetId == targetId && e.Hit);
     }
 
-    /// <summary>Looks up a squad (backlog 0003).</summary>
+    /// <summary>Looks up a squad (backlog 0004).</summary>
     public Squad Squad(string id) => Simulation.GetSquad(id);
 
     /// <summary>

@@ -82,34 +82,57 @@ public sealed class Scenario
 
     /// <summary>
     /// Adds a fighter: spec v0.1 infantry with the <see cref="SpecShooting.Rifle"/> (or <paramref name="weapon"/>),
-    /// standing, on <paramref name="side"/> under <paramref name="rules"/>.
+    /// standing, on <paramref name="side"/> under <paramref name="rules"/>, a <see cref="Experience.Regular"/> soldier
+    /// unless <paramref name="experience"/> says otherwise (backlog 0003).
     /// </summary>
     public Scenario WithFighter(
-        string id, Vec2 at, Side side, RulesOfEngagement rules, WeaponProfile? weapon = null, string? unitId = null) =>
-        WithUnit(id, at, SpecV01.Infantry, new Combatant(side, rules, weapon ?? SpecShooting.Rifle, unitId));
+        string id, Vec2 at, Side side, RulesOfEngagement rules, WeaponProfile? weapon = null, string? unitId = null,
+        Experience experience = Experience.Regular) =>
+        WithUnit(id, at, SpecV01.Infantry, new Combatant(side, rules, weapon ?? SpecShooting.Rifle, unitId, experience));
 
     /// <summary>
-    /// Starts a squad scenario (backlog 0003): <see cref="ForCombat"/> plus the <see cref="SpecSquad.Doctrine"/> command
+    /// Adds a fire team of five in a wedge (kiila) with its point at <paramref name="apex"/>, heading
+    /// <paramref name="facing"/> (any length). The arms trail back at 45° on both sides, <paramref name="spacingMeters"/>
+    /// between neighbours: <c>{prefix}-1</c> at the point, <c>-2</c> and <c>-3</c> left and right behind it, <c>-4</c> and
+    /// <c>-5</c> left and right at the rear. All are fighters with the rifle in the unit <paramref name="idPrefix"/>.
+    /// </summary>
+    public Scenario WithWedge(
+        string idPrefix, Vec2 apex, Vec2 facing, double spacingMeters, Side side, RulesOfEngagement rules)
+    {
+        var forward = facing.Normalized();
+        var left = new Vec2(-forward.Y, forward.X);
+        var step = spacingMeters / Math.Sqrt(2);
+        WithFighter($"{idPrefix}-1", apex, side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-2", apex - (forward * step) + (left * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-3", apex - (forward * step) - (left * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-4", apex - (forward * 2 * step) + (left * 2 * step), side, rules, unitId: idPrefix);
+        WithFighter($"{idPrefix}-5", apex - (forward * 2 * step) - (left * 2 * step), side, rules, unitId: idPrefix);
+        return this;
+    }
+
+    /// <summary>
+    /// Starts a squad scenario (backlog 0004): <see cref="ForCombat"/> plus the <see cref="SpecSquad.Doctrine"/> command
     /// delays. dt = 0.5 s, so every spec delay is a whole number of ticks.
     /// </summary>
     public static Scenario ForSquad() => ForCombat().WithSquadDoctrine(SpecSquad.Doctrine);
 
     /// <summary>
-    /// Places every member of <paramref name="squad"/> as a fighter (as <see cref="WithFighter"/>) and forms the squad
-    /// from them when the scenario is built. Members stand in a row, <see cref="SquadSpacingMeters"/> apart, eastward from
-    /// <paramref name="at"/> in the definition's member order. They hold fire unless <paramref name="rules"/> says
+    /// Places every member of <paramref name="squad"/> as a fighter (as <see cref="WithFighter"/>) with its experience,
+    /// and forms the squad from them when the scenario is built. Members stand in a row, <see cref="SquadSpacingMeters"/>
+    /// apart, eastward from <paramref name="at"/> in member order. They hold fire unless <paramref name="rules"/> says
     /// otherwise, so a test's shooting stays under its own control.
     /// </summary>
     public Scenario WithSquad(
-        SquadDefinition squad, Vec2 at, Side side = Side.Blue, RulesOfEngagement rules = RulesOfEngagement.HoldFire)
+        SquadSpec squad, Vec2 at, Side side = Side.Blue, RulesOfEngagement rules = RulesOfEngagement.HoldFire)
     {
         ArgumentNullException.ThrowIfNull(squad);
         for (var i = 0; i < squad.Members.Count; i++)
         {
-            WithFighter(squad.Members[i].UnitId, at + new Vec2(i * SquadSpacingMeters, 0), side, rules);
+            var member = squad.Members[i];
+            WithFighter(member.UnitId, at + new Vec2(i * SquadSpacingMeters, 0), side, rules, experience: member.Experience);
         }
 
-        _squads.Add(squad);
+        _squads.Add(squad.Definition);
         return this;
     }
 

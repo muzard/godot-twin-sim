@@ -11,8 +11,12 @@ namespace Twin.Scenarios.Tests.Combat;
 /// <summary>
 /// What fire does to the target (backlog 0002, E). The first hit pins it completely for 60 s: it drops prone at once and
 /// does not move, shoot, change posture or ask for permission. After that it is wounded: half speed, half hit
-/// probability, and it resumes its order. A second hit puts it out of action. Every shot at an agent, hit or miss,
-/// suppresses it for 10 s (prone, not moving on). No test-only hit model: the tests run until a real hit or miss happens.
+/// probability, and it resumes its order. A second hit puts it out of action. No test-only hit model: the tests run
+/// until a real hit happens.
+/// <para>
+/// Backlog 0003 replaced 0002's E5 and E6 ("every shot suppresses for 10 s", "each new shot extends it") with suppression
+/// as fire pressure; see <see cref="SuppressionTests"/> (SU4–SU7).
+/// </para>
 /// </summary>
 public class EffectsTests
 {
@@ -123,47 +127,5 @@ public class EffectsTests
         Assert.Equal(UnitActivity.OutOfAction, sim.Unit("blue").Activity);
         Assert.Null(sim.Unit("blue").CurrentOrder);
         Assert.DoesNotContain(sim.Events, e => e.AgentId == "blue" && e.Time > outAt);
-    }
-
-    [Fact]
-    public void E5_a_shot_at_an_agent_suppresses_it_for_ten_seconds()
-    {
-        // 500 m: the first shot is almost surely a miss (P ≈ 2 %); the test checks that it was.
-        var sim = BlueWalksPastRed(redDistance: 500, mapWidth: 300);
-        sim.RunUntil(s => s.Events.OfType<ShotFired>().Any(), TimeSpan.FromSeconds(10), "red fires");
-        var shot = sim.Events.OfType<ShotFired>().Single();
-        Assert.False(shot.Hit, "precondition: the first shot misses");
-        sim.Order("red", new CeaseFire());
-        var suppressedAt = sim.Unit("blue").Position;
-
-        sim.Unit("blue").Should().BeSuppressed().BeIn(Posture.Prone).HaveHealth(Health.Unhurt);
-        sim.RunFor(TimeSpan.FromSeconds(9));
-        sim.Unit("blue").Should().BeSuppressed();
-        Assert.Equal(suppressedAt, sim.Unit("blue").Position);
-
-        // Suppression ends at 10 s; standing up takes 1 s; then blue walks on with its order.
-        sim.RunFor(TimeSpan.FromSeconds(3));
-        sim.Unit("blue").Should().BeIn(Posture.Standing);
-        Assert.Equal(UnitActivity.Moving, sim.Unit("blue").Activity);
-        Assert.True(sim.Unit("blue").Position.Xy.DistanceTo(suppressedAt.Xy) > 0);
-        Assert.IsType<MoveThroughCorridor>(sim.Unit("blue").CurrentOrder);
-    }
-
-    [Fact]
-    public void E6_each_new_shot_extends_suppression()
-    {
-        var sim = Scenario.ForCombat()
-            .WithTerrain(TestMap.Create(widthMeters: 600, heightMeters: 40).Build())
-            .WithFighter("red", new Vec2(11, 21), Side.Red, RulesOfEngagement.HoldFire)
-            .WithFighter("blue", new Vec2(561, 21), Side.Blue, RulesOfEngagement.HoldFire)
-            .Build()
-            .Order("red", new FireAt("blue"));
-
-        sim.RunFor(TimeSpan.FromSeconds(30));
-        sim.Order("red", new CeaseFire()).RunFor(TimeSpan.FromSeconds(15));
-
-        var lastShot = sim.Events.OfType<ShotFired>().Last().Time;
-        var ended = Assert.Single(sim.Events.OfType<SuppressionEnded>(), e => e.AgentId == "blue");
-        Assert.InRange(ended.Time, lastShot + 10 - 1e-9, lastShot + 10 + SpecV01.DtSeconds + 1e-9);
     }
 }

@@ -1,7 +1,10 @@
-# 0003. Squad: leadership, formations and drills under fire (Smoke test II)
+# 0004. Squad: leadership, formations and drills under fire (Smoke test II)
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
-(2026-11-17); S2–S6 have no tests yet. Values marked **[PROPOSAL]** are
+(2026-11-17); S2–S6 have no tests yet. Drafted as 0003 in parallel with
+[0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
+and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
+redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
 starting values; as in 0002, tests will read them from one place (`SpecSquad` and `SpecShooting` in
 `tests/Twin.Testing`), so calibrating them later does not change what a test checks. The decisions are listed under
 "Decisions" at the end.
@@ -42,7 +45,8 @@ the `squad` section of scenario.json.
   - **kärkipartio** (point team): PJ + 2 riflemen
   - **tukipartio** (support team): the VJ as its team leader, the machine gunner and 1 rifleman **[PROPOSAL]**
 - **Experience** per agent, two levels: `Inexperienced` (kokematon, for example a conscript in training) and
-  `Experienced` (kokenut, a reservist or better).
+  `Experienced` (kokenut, a reservist or better). *Implemented through 0003's three-level `Combatant.Experience`;
+  see "Experience unified with 0003".*
 - **Chain of command and the team leader's weight.** A command from the RJ reaches a member after a delay:
   - an `Experienced` member acts on the RJ's command directly: delay `t_react(Experienced)`;
   - an `Inexperienced` member acts only when its team leader relays it: delay `t_react(PJ) + t_relay +
@@ -269,9 +273,37 @@ IDs: `SQ` squad and command, `SM` squad movement, `FO` formations, `WS` weapons 
 - **Timing tolerance:** a member acts no earlier than its delay and at most one tick after it (dt = 0.5 s in tests,
   so every delay is a whole number of ticks), as in 0002 E2.
 
+#### Experience unified with 0003 (2026-11-17)
+0003 (suppression and the contact drill) merged to `main` while S1 was in review. It gave every fighter
+`Combatant.Experience` with three levels: `Conscript` ("conscript or reservist"), `Regular` (the default) and
+`SpecialForces`. Two experience types for one soldier would disagree, so the squad has none of its own: a member's
+experience is its `Combatant.Experience`, and the chain of command reads it as follows.
+
+| `Combatant.Experience` | In the chain of command | Reaction to a command |
+|---|---|---|
+| `Conscript` | inexperienced: waits for its team leader's word | `InexperiencedReactionSeconds` (3 s) |
+| `Regular` | experienced: acts on the squad leader's command directly | `ExperiencedReactionSeconds` (1 s) |
+| `SpecialForces` | experienced | `ExperiencedReactionSeconds` (1 s) |
+
+The mapping lives in one place in each: `SquadDoctrine.ActsDirectly` and `ReactionSeconds` in the simulation, and
+`SpecSquad.Experienced` / `SpecSquad.Inexperienced` in the tests.
+
+**This is provisional and expected to change:**
+- The squad design (decision 4) counts **reservists as experienced**, but 0003's `Conscript` level puts conscripts and
+  reservists together. Mapped this way, a reservist squad behaves like conscripts. A fourth level (`Reservist`), or
+  moving reservists to `Regular`, is a decision for the product owner.
+- 0003 already has a reaction time per experience (`ExperienceValues.ReactionSeconds`: 2.0 / 1.5 / 0.5 s, from coming
+  under fire to the first snap shot). The squad's command reaction times (`SquadDoctrine`: 3 s / 1 s) are a different
+  thing (reacting to a command), kept separate for now; whether they should derive from one table is open.
+- `SpecialForces` is treated as `Regular` in the chain of command; it may deserve shorter delays.
+- S4 (suppression strength by rate of fire) and S5 (contact, drills) were designed before 0003, which already models
+  suppression as fire pressure with light and heavy levels, a contact report and an immediate action drill. Both parts
+  must be redesigned on 0003's model before their spec phase.
+
 #### API the S1 tests need from `Twin.Sim`
-- namespace `Twin.Sim.Squads`: enums `SquadRole` (`SquadLeader`, `SecondInCommand`, `TeamLeader`, `MachineGunner`,
-  `Rifleman`) and `Experience` (`Inexperienced`, `Experienced`); records `SquadMember(UnitId, Role, Team, Experience)`,
+*(As implemented after the merge with 0003: `SquadMember` has no experience; the old `Squads.Experience` enum is gone.)*
+- namespace `Twin.Sim.Squads`: enum `SquadRole` (`SquadLeader`, `SecondInCommand`, `TeamLeader`, `MachineGunner`,
+  `Rifleman`); records `SquadMember(UnitId, Role, Team)` (experience is the fighter's `Combatant.Experience`),
   `SquadDefinition(Id, Teams, Members)` and `SquadDoctrine(ExperiencedReactionSeconds, InexperiencedReactionSeconds,
   RelaySeconds, TakeoverSeconds)`; class `Squad` with `Id`, `LeaderId` (null while there is none), `Teams`, `Members`,
   `Member(unitId)` and `TeamLeaderId(team)` (null while there is none).
@@ -286,7 +318,9 @@ IDs: `SQ` squad and command, `SM` squad movement, `FO` formations, `WS` weapons 
   `HealthChanged(OutOfAction)` until the successor's change event; the replay reads it from that.
 - `WorldSnapshot.Squads`: `SquadSnapshot(Id, LeaderId, TeamLeaderIds)` in team order, rebuilt by `EventReplay`.
 
-Kit additions: `SpecSquad` (delays, team names, reference squad), `Scenario.ForSquad`, `WithSquad`,
+Kit additions: `SpecSquad` (delays, team names, reference squad, `Experienced` = `Regular` and `Inexperienced` =
+`Conscript`), `SquadSpec` / `SquadMemberSpec` (a squad definition plus each member's experience, so `WithSquad` can
+place each fighter with it), `Scenario.ForSquad`, `WithSquad`,
 `WithSquadDoctrine`, `ScenarioRun.Squad`, `Command`, `RunUntilOutOfAction`, `ReceivedBy`, and
 `CommandAssertions.ShouldHaveActedOn` / `ShouldNotHaveActedOn`.
 
@@ -371,6 +405,7 @@ Kit additions: `SpecSquad` (delays, team names, reference squad), `Scenario.ForS
 2. **Forest edge:** the squad deploys along the edge before the RJ asks (S2).
 3. **Drills in this epic:** take cover and return fire, break contact, bound forward. More drills later.
 4. **Experience:** two levels, inexperienced and experienced. Experienced members act directly on the RJ's command.
+   (Implemented through 0003's `Combatant.Experience`, provisionally: see "Experience unified with 0003".)
 5. **Composition:** depends on the unit (data). Reference: three teams of three (command, point, support).
 6. **The VJ** leads the support team.
 7. **Slots:** point team in front, command team with the RJ in the middle, support team at the rear.

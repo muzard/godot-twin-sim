@@ -113,6 +113,8 @@ public static class EventLog
             case ShotFired shot:
                 w.WriteString("target", shot.TargetId);
                 w.WriteBoolean("hit", shot.Hit);
+                w.WriteString("mode", shot.Mode.ToString());
+                w.WriteNumber("rounds", shot.Rounds);
                 break;
             case ShotHeard heard:
                 w.WriteString("shooter", heard.ShooterId);
@@ -126,7 +128,7 @@ public static class EventLog
                 w.WriteString("health", casualty.Health.ToString());
                 break;
             case SuppressionStarted suppression:
-                w.WriteNumber("until", suppression.Until);
+                w.WriteBoolean("heavy", suppression.Heavy);
                 break;
             case SuppressionEnded:
                 break;
@@ -152,6 +154,13 @@ public static class EventLog
             case TeamLeaderChanged teamLeader:
                 w.WriteString("squad", teamLeader.SquadId);
                 w.WriteString("team", teamLeader.Team);
+                break;
+            case ContactDrillStageChanged stage:
+                w.WriteString("stage", stage.Stage.ToString());
+                break;
+            case ContactReported report:
+                w.WriteString("attacker", report.AttackerId);
+                WritePoint(w, "attackerPosition", report.AttackerPosition);
                 break;
             default:
                 throw new ArgumentException($"Unknown event type {e.GetType().Name}.", nameof(e));
@@ -182,11 +191,13 @@ public static class EventLog
             nameof(PermissionTimedOut) => new PermissionTimedOut(time, agent, Text(j, "boundary")),
             nameof(Arrived) => new Arrived(time, agent, Point2(j.GetProperty("position"))),
             nameof(Blocked) => new Blocked(time, agent, Text(j, "reason")),
-            nameof(ShotFired) => new ShotFired(time, agent, Text(j, "target"), j.GetProperty("hit").GetBoolean()),
+            nameof(ShotFired) => new ShotFired(time, agent, Text(j, "target"), j.GetProperty("hit").GetBoolean(),
+                j.TryGetProperty("mode", out var mode) ? Enum.Parse<FireMode>(mode.GetString() ?? string.Empty) : FireMode.Aimed,
+                j.TryGetProperty("rounds", out var rounds) ? rounds.GetInt32() : 1),
             nameof(ShotHeard) => new ShotHeard(time, agent, Text(j, "shooter"), Point2(j.GetProperty("shooterPosition"))),
             nameof(HealthChanged) => new HealthChanged(time, agent, Enum.Parse<Health>(Text(j, "health"))),
             nameof(CasualtyOccurred) => new CasualtyOccurred(time, agent, Point2(j.GetProperty("position")), Enum.Parse<Health>(Text(j, "health"))),
-            nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.GetProperty("until").GetDouble()),
+            nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.TryGetProperty("heavy", out var heavy) && heavy.GetBoolean()),
             nameof(SuppressionEnded) => new SuppressionEnded(time, agent),
             nameof(PostureChanged) => new PostureChanged(time, agent, Enum.Parse<Posture>(Text(j, "posture"))),
             nameof(SquadFormed) => new SquadFormed(time, agent, Text(j, "squad"), Strings(j, "teams"), Strings(j, "teamLeaders")),
@@ -194,6 +205,8 @@ public static class EventLog
             nameof(CommandReceived) => new CommandReceived(time, agent, j.GetProperty("commandId").GetInt32()),
             nameof(LeaderChanged) => new LeaderChanged(time, agent, Text(j, "squad")),
             nameof(TeamLeaderChanged) => new TeamLeaderChanged(time, agent, Text(j, "squad"), Text(j, "team")),
+            nameof(ContactDrillStageChanged) => new ContactDrillStageChanged(time, agent, Enum.Parse<ContactDrillStage>(Text(j, "stage"))),
+            nameof(ContactReported) => new ContactReported(time, agent, Text(j, "attacker"), Point2(j.GetProperty("attackerPosition"))),
             _ => throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Unknown event type '{type}'.")),
         };
     }
@@ -251,8 +264,9 @@ public static class EventReplay
     public const double TimeTolerance = 1e-9;
 
     /// <summary>
-    /// Every agent's position, activity, health, posture and suppression, and every squad's leaders, after all events up
-    /// to <paramref name="timeSeconds"/>. A leader out of action leaves its place empty until a successor takes over.
+    /// Every agent's position, activity, health, posture, suppression and drill stage, and every squad's leaders,
+    /// after all events up to <paramref name="timeSeconds"/>. A leader out of action leaves its place empty until a
+    /// successor takes over.
     /// </summary>
     public static WorldSnapshot SnapshotAt(IReadOnlyList<SimEvent> events, double timeSeconds)
     {
@@ -285,11 +299,21 @@ public static class EventReplay
                 case PostureChanged posture when agents.TryGetValue(e.AgentId, out var agent):
                     agents[e.AgentId] = agent with { Posture = posture.Posture };
                     break;
-                case SuppressionStarted when agents.TryGetValue(e.AgentId, out var agent):
-                    agents[e.AgentId] = agent with { Suppressed = true };
+                case SuppressionStarted started when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { Suppressed = true, HeavilySuppressed = started.Heavy };
                     break;
                 case SuppressionEnded when agents.TryGetValue(e.AgentId, out var agent):
-                    agents[e.AgentId] = agent with { Suppressed = false };
+                    agents[e.AgentId] = agent with { Suppressed = false, HeavilySuppressed = false };
+                    break;
+                case ContactDrillStageChanged stage when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with
+                    {
+                        DrillStage = stage.Stage,
+                        AwaitingOrders = stage.Stage != ContactDrillStage.None && agent.AwaitingOrders,
+                    };
+                    break;
+                case ContactReported when agents.TryGetValue(e.AgentId, out var agent):
+                    agents[e.AgentId] = agent with { AwaitingOrders = true };
                     break;
                 default:
                     break;

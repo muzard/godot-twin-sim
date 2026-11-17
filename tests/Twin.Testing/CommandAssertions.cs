@@ -3,7 +3,7 @@ using Twin.Sim.Events;
 namespace Twin.Testing;
 
 /// <summary>
-/// Assertions about when squad members act on a command (backlog 0003). Delays are whole ticks in
+/// Assertions about when squad members act on a command (backlog 0004). Delays are whole ticks in
 /// <see cref="Scenario.ForSquad"/>, but a system may notice a due delay on the tick after, so "acts after d seconds"
 /// means: no earlier than d, and no later than one tick after d.
 /// </summary>

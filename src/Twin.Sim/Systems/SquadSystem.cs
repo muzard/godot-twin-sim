@@ -7,7 +7,7 @@ using Twin.Sim.Units;
 namespace Twin.Sim.Systems;
 
 /// <summary>
-/// The chain of command (backlog 0003, S1). A squad leader's command reaches each member after a delay
+/// The chain of command (backlog 0004, S1). A squad leader's command reaches each member after a delay
 /// (<see cref="SquadDoctrine"/>):
 /// <list type="bullet">
 /// <item>an experienced member, a team leader, and any member of the leader's own team act after their own reaction
@@ -55,11 +55,12 @@ public sealed class SquadSystem : ISimSystem
             }
 
             var teamLeader = squad.TeamLeaderId(member.Team);
-            if (member.Experience == Experience.Experienced || teamLeader == member.UnitId || teamLeader == leader.Id)
+            var experience = ExperienceOf(simulation, member.UnitId);
+            if (SquadDoctrine.ActsDirectly(experience) || teamLeader == member.UnitId || teamLeader == leader.Id)
             {
-                var relayTo = teamLeader == member.UnitId ? WaitingForTheirTeamLeader(squad, member) : [];
+                var relayTo = teamLeader == member.UnitId ? WaitingForTheirTeamLeader(simulation, squad, member) : [];
                 squad.Deliveries.Add(new Squad.Delivery(
-                    member.UnitId, commandId, command, now + doctrine.ReactionSeconds(member.Experience), relayTo));
+                    member.UnitId, commandId, command, now + doctrine.ReactionSeconds(experience), relayTo));
             }
 
             // Otherwise the member waits for its team leader to pass the command on, or, with no team leader, the
@@ -67,11 +68,16 @@ public sealed class SquadSystem : ISimSystem
         }
     }
 
-    private static List<string> WaitingForTheirTeamLeader(Squad squad, SquadMember teamLeader) =>
+    private static List<string> WaitingForTheirTeamLeader(Simulation simulation, Squad squad, SquadMember teamLeader) =>
         squad.Members
-            .Where(m => m.Team == teamLeader.Team && m.UnitId != teamLeader.UnitId && m.Experience == Experience.Inexperienced)
+            .Where(m => m.Team == teamLeader.Team && m.UnitId != teamLeader.UnitId &&
+                !SquadDoctrine.ActsDirectly(ExperienceOf(simulation, m.UnitId)))
             .Select(m => m.UnitId)
             .ToList();
+
+    /// <summary>A member's experience: its own as a fighter (every squad member is one).</summary>
+    private static Experience ExperienceOf(Simulation simulation, string unitId) =>
+        simulation.GetUnit(unitId).Combatant?.Experience ?? Experience.Regular;
 
     private static void Deliver(Simulation simulation, Squad squad)
     {
@@ -93,7 +99,7 @@ public sealed class SquadSystem : ISimSystem
             foreach (var recipient in delivery.RelayTo)
             {
                 // Counted from when the team leader was due to act, so ticks never add up to extra delay.
-                var relayed = delivery.Due + doctrine.RelaySeconds + doctrine.ReactionSeconds(squad.Member(recipient).Experience);
+                var relayed = delivery.Due + doctrine.RelaySeconds + doctrine.ReactionSeconds(ExperienceOf(simulation, recipient));
                 squad.Deliveries.Add(new Squad.Delivery(recipient, delivery.CommandId, delivery.Command, relayed, []));
             }
         }

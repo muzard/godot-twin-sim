@@ -57,16 +57,18 @@ public static class LineOfSight
     }
 }
 
-/// <summary>Hit probability and the hit draw (backlog 0002).</summary>
+/// <summary>Hit probability and the hit draw (backlog 0002, with experience and fire modes from backlog 0003).</summary>
 public static class HitModel
 {
     /// <summary>
-    /// P(hit) = P0 · exp(−d / falloff) · T · Size(target posture) · S(shooter suppressed) · W(shooter wounded),
-    /// zero beyond the weapon's maximum range.
+    /// P(hit) per round = P0 · exp(−d / falloff) · T · Size(target posture) · S(shooter suppressed) · W(shooter wounded)
+    /// · A(shooter experience) · K(fire mode), zero beyond the weapon's maximum range. A regular soldier's aimed shot
+    /// has the 0002 probability.
     /// </summary>
     public static double Probability(
         WeaponProfile weapon, CombatRules rules, double distance, double transmission, Posture targetPosture,
-        bool shooterSuppressed, bool shooterWounded)
+        bool shooterSuppressed, bool shooterWounded, Experience shooterExperience = Experience.Regular,
+        FireMode mode = FireMode.Aimed)
     {
         ArgumentNullException.ThrowIfNull(weapon);
         ArgumentNullException.ThrowIfNull(rules);
@@ -78,8 +80,13 @@ public static class HitModel
         return weapon.HitProbabilityAtZero * Math.Exp(-distance / weapon.HitFalloffMeters) * transmission
             * rules.For(targetPosture).SizeFactor
             * (shooterSuppressed ? rules.SuppressedHitFactor : 1)
-            * (shooterWounded ? rules.WoundedHitFactor : 1);
+            * (shooterWounded ? rules.WoundedHitFactor : 1)
+            * rules.Suppression.For(shooterExperience).Accuracy
+            * rules.Suppression.For(mode).HitFactor;
     }
+
+    /// <summary>P(a burst of <paramref name="rounds"/> hits) = 1 − (1 − p)^n: it hits when any of its rounds would.</summary>
+    public static double BurstProbability(double perRound, int rounds) => 1 - Math.Pow(1 - perRound, rounds);
 
     /// <summary>Draws one hit or miss with probability <paramref name="probability"/>. Always draws exactly one number.</summary>
     public static bool Roll(DeterministicRandom random, double probability)

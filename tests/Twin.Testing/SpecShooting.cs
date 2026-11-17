@@ -1,4 +1,5 @@
 using Twin.Sim.Combat;
+using Twin.Sim.Command;
 
 namespace Twin.Testing;
 
@@ -18,7 +19,10 @@ public static class SpecShooting
     /// <summary>Prone: eye 0.3 m, aim point 0.2 m, crawling at 0.1 speed, 0.4 size.</summary>
     public static PostureValues Prone { get; } = new(EyeHeight: 0.3, AimHeight: 0.2, SpeedFactor: 0.1, SizeFactor: 0.4);
 
-    /// <summary>Line of sight, hit, posture and suppression rules of backlog 0002.</summary>
+    /// <summary>
+    /// Line of sight, hit and posture rules of backlog 0002, with the suppression rules and the drill of backlog 0003
+    /// (<see cref="SpecSuppression"/>). The 0002 rule "a shot suppresses for 10 s" is gone.
+    /// </summary>
     public static CombatRules Rules { get; } = new(
         Standing: Standing,
         Crouching: Crouching,
@@ -32,12 +36,16 @@ public static class SpecShooting
         SuppressedHitFactor: 0.3,
         WoundedHitFactor: 0.5,
         WoundedSpeedFactor: 0.5,
-        PinnedSeconds: 60,
-        SuppressionSeconds: 10);
+        PinnedSeconds: 60)
+    {
+        Suppression = SpecSuppression.Rules,
+        Doctrine = Doctrine.Default with { Drill = SpecSuppression.Drill },
+    };
 
     /// <summary>
     /// The infantry rifle: P(hit) = 0.6 · exp(−d / 150 m) up to 600 m, one aimed shot every 2 s, 150 rounds,
-    /// heard up to 1500 m, muzzle flash visible for 2 s.
+    /// heard up to 1500 m, muzzle flash visible for 2 s. Backlog 0003: a round passing close suppresses with S = 1.2,
+    /// one round per shot, a snap shot every 0.7 s.
     /// </summary>
     public static WeaponProfile Rifle { get; } = new(
         HitProbabilityAtZero: 0.6,
@@ -46,7 +54,10 @@ public static class SpecShooting
         SecondsPerShot: 2,
         Rounds: 150,
         SoundRangeMeters: 1500,
-        FlashSeconds: 2);
+        FlashSeconds: 2,
+        SuppressionPerRound: 1.2,
+        RoundsPerBurst: 1,
+        SnapSecondsPerShot: 0.7);
 
     /// <summary>Hit probability from range alone: 0.6 · exp(−d / 150), zero beyond 600 m.</summary>
     public static double RangeProbability(double distance) => distance > 600 ? 0 : 0.6 * Math.Exp(-distance / 150);
@@ -55,5 +66,7 @@ public static class SpecShooting
     public static double Transmission(double forestMeters) => Math.Exp(-forestMeters / 25);
 
     /// <summary>A combatant with the rifle.</summary>
-    public static Combatant Fighter(Side side, RulesOfEngagement rules, string? unitId = null) => new(side, rules, Rifle, unitId);
+    public static Combatant Fighter(
+        Side side, RulesOfEngagement rules, string? unitId = null, Experience experience = Experience.Regular) =>
+        new(side, rules, Rifle, unitId, experience);
 }

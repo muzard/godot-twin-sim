@@ -15,4 +15,5 @@ New ADRs copy `0000-template.md` and take the next number. Superseded ADRs stay,
 | [0008](0008-tdd-and-ai-harness.md) | TDD workflow and AI harness | Accepted, data policy open |
 | [0009](0009-forest-edge-is-a-hard-boundary.md) | Leaving forest always crosses a hard boundary | Accepted |
 | [0010](0010-cliffs-block-movement-unless-rappelling.md) | Cliffs block movement unless the unit can rappel | Accepted |
-| [0011](0011-shared-harness-submodule.md) | Shared AI harness as a git submodule | Proposed |
+| [0011](0011-shared-harness-submodule.md) | Shared AI harness as a git submodule | Superseded by 0012 |
+| [0012](0012-shared-harness-as-plugin-and-clone.md) | Shared team knowledge through a plugin and a personal clone | Accepted |

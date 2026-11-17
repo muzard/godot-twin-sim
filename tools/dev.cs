@@ -11,7 +11,8 @@
 //   ./dev replay <scenario> run a scenario (e.g. st1), write its event log to replays/ and replay the log;
 //                     options --answer Grant|Deny|NoAnswer, --every <s>, --out <file>, --max-seconds <s>;
 //                     a .jsonl path only replays that log; --godot opens the replay in the Godot client
-//                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it)
+//                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it);
+//                     ./dev replay st1-combat runs a built-in fire fight on st1 instead of a scenario
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)
@@ -66,9 +67,7 @@ void CheckGodot()
     var output = Capture(godot, "--version");
     if (output is null)
     {
-        Console.WriteLine($"!! Godot not found. Install Godot {wanted} (.NET edition) from " +
-                          $"https://godotengine.org/download/archive/{wanted}/ and put it on PATH as 'godot' " +
-                          "or set the GODOT environment variable. Only needed for the visual client.");
+        Console.WriteLine($"{GodotNotFound(godot, wanted)} Only needed for the visual client.");
     }
     else if (!output.StartsWith(wanted.Replace("-stable", string.Empty, StringComparison.Ordinal), StringComparison.Ordinal) ||
              !output.Contains("mono", StringComparison.OrdinalIgnoreCase))
@@ -138,10 +137,18 @@ int Replay(string[] a)
     {
         scenario = target;
         log = OptionValue(options, "--out") ?? string.Empty;
+        var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
+        var isDemo = !Directory.Exists(Path.Combine(root, target)) && !Directory.Exists(Path.Combine(root, "scenarios", target));
+        if (isDemo)
+        {
+            // A built-in demo such as st1-combat: the part before the last '-' names its map.
+            scenario = name.Contains('-') ? name[..name.LastIndexOf('-')] : name;
+        }
+
         if (log.Length == 0)
         {
-            // Name the log here and hand it to the runner, so both use the same file.
-            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl); it rejects other answers.
+            // Same names as the runner's own default (replays/<scenario>-<Answer>.jsonl, replays/<demo>.jsonl), passed
+            // to it so both use the same file. The runner rejects any other answer.
             var answer = OptionValue(options, "--answer")?.ToLowerInvariant() switch
             {
                 null or "grant" => "Grant",
@@ -149,8 +156,7 @@ int Replay(string[] a)
                 "noanswer" => "NoAnswer",
                 var other => other,
             };
-            var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(target, root)));
-            log = Path.Combine("replays", $"{name}-{answer}.jsonl");
+            log = Path.Combine("replays", isDemo ? $"{name}.jsonl" : $"{name}-{answer}.jsonl");
             options.AddRange(["--out", log]);
         }
 
@@ -169,15 +175,29 @@ int Replay(string[] a)
         return 1;
     }
 
+    var godot = FindGodot();
+    var wanted = File.ReadAllText(Path.Combine(root, ".godot-version")).Trim();
+    if (Capture(godot, "--version") is null)
+    {
+        Console.WriteLine(GodotNotFound(godot, wanted));
+        return 1;
+    }
+
     Console.WriteLine("== Building the Godot client");
     if (Run("dotnet", ["build", "src/Twin.Client", "--nologo", "--verbosity", "quiet"]) != 0)
     {
         return 1;
     }
 
-    Console.WriteLine($"== Opening {log} in Godot");
-    return Run(FindGodot(), ["--path", Path.Combine(root, "src", "Twin.Client"), "res://Replay.tscn", "--",
+    Console.WriteLine($"== Opening {log} in Godot ({godot})");
+    var exitCode = Run(godot, ["--path", Path.Combine(root, "src", "Twin.Client"), "res://Replay.tscn", "--",
         "--scenario", Path.GetFullPath(scenarioDir, root), "--log", Path.GetFullPath(log, root)]);
+    if (exitCode != 0)
+    {
+        Console.WriteLine($"!! Godot exited with code {exitCode}.");
+    }
+
+    return exitCode;
 }
 
 static string? OptionValue(List<string> options, string name)
@@ -190,7 +210,7 @@ string FindGodot()
 {
     if (Environment.GetEnvironmentVariable("GODOT") is { Length: > 0 } fromEnvironment)
     {
-        return fromEnvironment;
+        return ResolveGodotPath(fromEnvironment);
     }
 
     // macOS installs the app bundle without putting it on PATH.
@@ -199,6 +219,37 @@ string FindGodot()
     var bundle = bundles.FirstOrDefault(b => File.Exists(Path.Combine(b, "Contents", "MacOS", "Godot")));
     return bundle is null || Capture("godot", "--version") is not null ? "godot" : Path.Combine(bundle, "Contents", "MacOS", "Godot");
 }
+
+// GODOT is read as a shell would read it: ~ is the home directory, and a relative path is relative to the directory
+// ./dev was started from (the launcher passes it in DEV_CALLER_DIR before it changes to the repository root). A macOS
+// app bundle means the executable inside it. A bare name such as "godot" is left for PATH lookup.
+static string ResolveGodotPath(string path)
+{
+    var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+    if (path == "~")
+    {
+        path = home;
+    }
+    else if (path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
+    {
+        path = Path.Combine(home, path[2..]);
+    }
+
+    if (path.Contains('/') || path.Contains('\\'))
+    {
+        var caller = Environment.GetEnvironmentVariable("DEV_CALLER_DIR") is { Length: > 0 } dir ? dir : Directory.GetCurrentDirectory();
+        path = Path.GetFullPath(path, caller);
+    }
+
+    var inBundle = Path.Combine(path, "Contents", "MacOS", "Godot");
+    return Directory.Exists(path) && File.Exists(inBundle) ? inBundle : path;
+}
+
+// Says why Godot could not be started instead of failing silently.
+static string GodotNotFound(string godot, string wanted) =>
+    $"!! Could not start Godot as '{godot}'. Install Godot {wanted} (.NET edition) from " +
+    $"https://godotengine.org/download/archive/{wanted}/ and put it on PATH as 'godot', or set the GODOT environment " +
+    "variable to its executable (a full path, ~/..., a path relative to where you run ./dev, or on macOS the .app). See GODOT_README.md.";
 
 int DockerTest()
 {

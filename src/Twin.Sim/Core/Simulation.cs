@@ -36,7 +36,7 @@ public sealed class Simulation
         Random = new DeterministicRandom(Config.Seed);
 
         // System order is part of the simulation's behaviour. Change it deliberately.
-        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new FireSystem(), new SquadSystem()];
+        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem()];
     }
 
     /// <summary>The ground surface.</summary>
@@ -60,7 +60,7 @@ public sealed class Simulation
     /// <summary>Everything that has happened so far, in order (spec v0.1 event log; see <see cref="EventLog"/>).</summary>
     public IReadOnlyList<SimEvent> EventLog => _events;
 
-    /// <summary>All squads, ordered by id (backlog 0003).</summary>
+    /// <summary>All squads, ordered by id (backlog 0004).</summary>
     public IReadOnlyCollection<Squad> Squads => _squads.Values;
 
     /// <summary>Places a ground unit on the map. Its height is taken from the terrain.</summary>
@@ -94,7 +94,7 @@ public sealed class Simulation
     }
 
     /// <summary>
-    /// Forms a squad from fighters already on the map (backlog 0003). Moves no one. Logs <see cref="SquadFormed"/>.
+    /// Forms a squad from fighters already on the map (backlog 0004). Moves no one. Logs <see cref="SquadFormed"/>.
     /// </summary>
     /// <exception cref="ArgumentException">The squad is invalid (see <see cref="SquadDefinition"/>); nothing is changed.</exception>
     public Squad AddSquad(SquadDefinition definition)
@@ -125,10 +125,29 @@ public sealed class Simulation
     /// </summary>
     public bool CanSee(string observerId, string targetId) => CombatQueries.Sees(this, GetUnit(observerId), GetUnit(targetId));
 
-    /// <summary>Every agent's position, activity, health, posture and suppression now, ordered by id: what a live viewer shows.</summary>
+    /// <summary>
+    /// The nearest cover for an agent against the given attackers (backlog 0003): a point within the drill's search
+    /// distance, reachable without crossing a hard boundary of its corridor order, where no attacker can see it lying
+    /// prone. Null if there is none.
+    /// </summary>
+    public Vec2? FindCover(string agentId, params string[] attackerIds) =>
+        Destination(CoverSearch.Cover(this, GetUnit(agentId), Fighters(attackerIds)));
+
+    /// <summary>
+    /// The nearest firing position for an agent against the given attackers (backlog 0003), forward first: cover from
+    /// which it sees an attacker when crouching, in range, with a clear fire sector. Null if there is none.
+    /// </summary>
+    public Vec2? FindFiringPosition(string agentId, params string[] attackerIds) =>
+        Destination(CoverSearch.FiringPosition(this, GetUnit(agentId), Fighters(attackerIds)));
+
+    /// <summary>
+    /// Every agent's position, activity, health, posture, suppression and drill stage now, ordered by id: what a live
+    /// viewer shows.
+    /// </summary>
     public WorldSnapshot Snapshot() =>
         new(TimeSeconds, _units.Values
-            .Select(u => new AgentSnapshot(u.Id, u.Position, u.Activity, u.Health, u.Posture, u.IsSuppressed))
+            .Select(u => new AgentSnapshot(u.Id, u.Position, u.Activity, u.Health, u.Posture, u.IsSuppressed,
+                u.IsHeavilySuppressed, u.DrillStage, u.IsAwaitingOrders))
             .ToList())
         {
             Squads = _squads.Values.Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds])).ToList(),
@@ -194,6 +213,12 @@ public sealed class Simulation
         foreach (var (unitId, order) in _pendingOrders)
         {
             var unit = _units[unitId];
+            if (order is not SetPosture)
+            {
+                ContactDrillSystem.End(this, unit);    // any new order ends the drill under fire
+                ContactDrillSystem.Answer(unit);       // and the leader's order stands against the fire it answers
+            }
+
             switch (order)
             {
                 case SetPosture posture:
@@ -335,6 +360,14 @@ public sealed class Simulation
         return (leaders[0].UnitId, teamLeaders);
     }
 
+    private static Vec2? Destination(List<Vec2>? route) => route is null ? null : route[^1];
+
+    private List<Unit> Fighters(string[] ids)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        return ids.Select(GetUnit).Where(u => u.Health != Health.OutOfAction).ToList();
+    }
+
     private void CheckPlacement(string id, Vec2 position)
     {
         if (_units.ContainsKey(id))
@@ -455,6 +488,10 @@ public sealed class Simulation
             hash.Add((long)unit.Health);
             hash.Add((long)unit.Posture);
             hash.Add(unit.IsSuppressed ? 1 : 0);
+            hash.Add(unit.IsHeavilySuppressed ? 1 : 0);
+            hash.Add(unit.SuppressionPressure);
+            hash.Add((long)unit.DrillStage);
+            hash.Add(unit.IsAwaitingOrders ? 1 : 0);
             hash.Add(unit.RoundsLeft);
             hash.Add(unit.CurrentOrder?.ToString() ?? "none");
         }

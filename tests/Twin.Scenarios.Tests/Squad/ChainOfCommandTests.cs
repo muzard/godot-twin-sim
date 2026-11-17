@@ -8,8 +8,9 @@ using Twin.Testing;
 namespace Twin.Scenarios.Tests.Squad;
 
 /// <summary>
-/// The chain of command (backlog 0003, S1: SQ3–SQ4). The squad leader commands at once; a member acts on the command
-/// after a delay that depends on its experience and on its team leader:
+/// The chain of command (backlog 0004, S1: SQ3–SQ4). The squad leader commands at once; a member acts on the command
+/// after a delay that depends on its experience (<see cref="SpecSquad.Experienced"/> or
+/// <see cref="SpecSquad.Inexperienced"/>) and on its team leader:
 /// <list type="bullet">
 /// <item>an experienced member acts on the leader's command directly, after its own reaction time (1 s);</item>
 /// <item>an inexperienced member acts only when its team leader passes the command on: the team leader's own reaction
@@ -38,14 +39,14 @@ public class ChainOfCommandTests
     // k3 (inexperienced). Members stand 3 m apart from x = 21, so pj is at x = 27; red stands 5 m north of it.
     private static ScenarioRun PointTeamWithAnEnemyNextToItsLeader() => Scenario.ForSquad()
         .WithTerrain(TestMap.Create(widthMeters: 100, heightMeters: 60).Build())
-        .WithSquad(new SquadDefinition("r1", [SpecSquad.CommandTeam, SpecSquad.PointTeam],
+        .WithSquad(new SquadSpec("r1", [SpecSquad.CommandTeam, SpecSquad.PointTeam],
         [
-            SpecSquad.Member("rj", SquadRole.SquadLeader, SpecSquad.CommandTeam, Experience.Experienced),
-            SpecSquad.Member("j1", SquadRole.Rifleman, SpecSquad.CommandTeam, Experience.Experienced),
-            SpecSquad.Member("pj", SquadRole.TeamLeader, SpecSquad.PointTeam, Experience.Inexperienced),
-            SpecSquad.Member("k1", SquadRole.Rifleman, SpecSquad.PointTeam, Experience.Inexperienced),
-            SpecSquad.Member("k2", SquadRole.Rifleman, SpecSquad.PointTeam, Experience.Experienced),
-            SpecSquad.Member("k3", SquadRole.Rifleman, SpecSquad.PointTeam, Experience.Inexperienced),
+            SpecSquad.Member("rj", SquadRole.SquadLeader, SpecSquad.CommandTeam, SpecSquad.Experienced),
+            SpecSquad.Member("j1", SquadRole.Rifleman, SpecSquad.CommandTeam, SpecSquad.Experienced),
+            SpecSquad.Member("pj", SquadRole.TeamLeader, SpecSquad.PointTeam, SpecSquad.Inexperienced),
+            SpecSquad.Member("k1", SquadRole.Rifleman, SpecSquad.PointTeam, SpecSquad.Inexperienced),
+            SpecSquad.Member("k2", SquadRole.Rifleman, SpecSquad.PointTeam, SpecSquad.Experienced),
+            SpecSquad.Member("k3", SquadRole.Rifleman, SpecSquad.PointTeam, SpecSquad.Inexperienced),
         ]), Start)
         .WithFighter("red", new Vec2(27, 26), Side.Red, RulesOfEngagement.HoldFire)
         .Build();

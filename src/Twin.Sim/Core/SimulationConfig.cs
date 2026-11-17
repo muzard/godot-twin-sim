@@ -21,6 +21,6 @@ public sealed record SimulationConfig(int TickRateHz = 20, ulong Seed = 1)
     /// <summary>Rules of line of sight, hits, posture and suppression (backlog 0002).</summary>
     public CombatRules Combat { get; init; } = CombatRules.Default;
 
-    /// <summary>How commands travel in a squad: reaction, relay and takeover times (backlog 0003).</summary>
+    /// <summary>How commands travel in a squad: reaction, relay and takeover times (backlog 0004).</summary>
     public SquadDoctrine SquadDoctrine { get; init; } = SquadDoctrine.Default;
 }
