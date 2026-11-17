@@ -26,7 +26,7 @@ Run the visual client: open `src/Twin.Client/project.godot` in Godot 4.7.2 .NET 
 Left click selects a unit, right click orders it to move, the mouse wheel zooms.
 
 Run the simulation without graphics: `./dev run -- --seconds 60`. Run a scenario from `scenarios/` and replay its
-event log: `./dev replay st1` (see `docs/smoke-test-1.md`).
+event log: `./dev replay st1` (see `docs/smoke-test-1.md`); add `--godot` to watch it on the map in the Godot client.
 
 ## Repository map
 
