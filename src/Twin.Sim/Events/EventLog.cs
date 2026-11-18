@@ -77,6 +77,26 @@ public static class EventLog
         {
             case AgentPlaced placed:
                 WritePoint(w, "position", placed.Position);
+                if (placed.Side is { } side)
+                {
+                    w.WriteString("side", side.ToString());
+                }
+
+                break;
+            case WatchChanged watch:
+                WritePoint(w, "direction", watch.Direction);
+                w.WriteStartArray("sectors");
+                foreach (var sector in watch.Sectors)
+                {
+                    w.WriteStartArray();
+                    w.WriteNumberValue(sector.Centre.X);
+                    w.WriteNumberValue(sector.Centre.Y);
+                    w.WriteNumberValue(sector.WidthDegrees);
+                    w.WriteEndArray();
+                }
+
+                w.WriteEndArray();
+                w.WriteBoolean("air", watch.WatchesAir);
                 break;
             case AgentMoved moved:
                 WritePoint(w, "position", moved.Position);
@@ -217,7 +237,12 @@ public static class EventLog
         var type = j.GetProperty("type").GetString();
         return type switch
         {
-            nameof(AgentPlaced) => new AgentPlaced(time, agent, Point3(j.GetProperty("position"))),
+            nameof(AgentPlaced) => new AgentPlaced(time, agent, Point3(j.GetProperty("position")),
+                j.TryGetProperty("side", out var side) ? Enum.Parse<Side>(side.GetString() ?? string.Empty) : null),
+            nameof(WatchChanged) => new WatchChanged(time, agent, Point2(j.GetProperty("direction")),
+                j.GetProperty("sectors").EnumerateArray()
+                    .Select(s => new ObservationSector(new Vec2(s[0].GetDouble(), s[1].GetDouble()), s[2].GetDouble())).ToList(),
+                j.GetProperty("air").GetBoolean()),
             nameof(AgentMoved) => new AgentMoved(time, agent, Point3(j.GetProperty("position"))),
             nameof(ActivityChanged) => new ActivityChanged(time, agent, Enum.Parse<UnitActivity>(Text(j, "activity"))),
             nameof(PathPlanned) => new PathPlanned(time, agent,
@@ -322,6 +347,7 @@ public static class EventReplay
         var squads = new SortedDictionary<string, SquadSnapshot>(StringComparer.Ordinal);
         var teams = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
         var known = new SortedDictionary<string, SortedDictionary<string, Vec2>>(StringComparer.Ordinal);
+        var watches = new SortedDictionary<string, WatchSnapshot>(StringComparer.Ordinal);
         foreach (var e in events)
         {
             if (e.Time > timeSeconds + TimeTolerance)
@@ -339,7 +365,11 @@ public static class EventReplay
                     Know(known, e.AgentId, received.EnemyId, received.EnemyPosition);
                     break;
                 case AgentPlaced placed:
-                    agents[e.AgentId] = new AgentSnapshot(e.AgentId, placed.Position, UnitActivity.Idle);
+                    agents[e.AgentId] = new AgentSnapshot(e.AgentId, placed.Position, UnitActivity.Idle, Side: placed.Side);
+                    watches[e.AgentId] = new WatchSnapshot(e.AgentId, Units.Unit.InitialWatchDirection, [], false);
+                    break;
+                case WatchChanged watch:
+                    watches[e.AgentId] = new WatchSnapshot(e.AgentId, watch.Direction, watch.Sectors, watch.WatchesAir);
                     break;
                 case AgentMoved moved when agents.TryGetValue(e.AgentId, out var agent):
                     agents[e.AgentId] = agent with { Position = moved.Position };
@@ -378,6 +408,7 @@ public static class EventReplay
         {
             Squads = squads.Values.ToList(),
             KnownEnemies = known.SelectMany(a => a.Value.Select(k => new KnownEnemySnapshot(a.Key, k.Key, k.Value))).ToList(),
+            Watches = watches.Values.ToList(),
         };
     }
 

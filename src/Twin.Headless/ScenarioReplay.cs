@@ -20,6 +20,7 @@ internal static class ScenarioReplay
         "Usage: ./dev replay <scenario | log.jsonl> [--answer Grant|Deny|NoAnswer] [--every 60] [--out file.jsonl] [--max-seconds 7200]\n" +
         "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
         "  st1-combat runs a built-in fire fight on st1 (two fire teams of three) to replays/st1-combat.jsonl.\n" +
+        "  st1-ambush runs a built-in ambush on st1 (a squad of nine through the corridor, three red fighters) to replays/st1-ambush.jsonl.\n" +
         "  Exit code 2: the run was not over (agent idle or blocked, fight decided) when --max-seconds ran out.";
 
     public static int Run(string[] args)
@@ -78,6 +79,21 @@ internal static class ScenarioReplay
                 () => string.Create(CultureInfo.InvariantCulture,
                     $"{fight.EventLog.OfType<ShotFired>().Count()} shots, {fight.Units.Count(u => u.Health == Health.OutOfAction)} out of action"),
                 every, maxSeconds);
+        }
+
+        if (target == AmbushDemo.Name)
+        {
+            if (options.ContainsKey("--answer"))
+            {
+                Console.WriteLine("--answer does not apply to the ambush demo: its platoon leader always grants.");
+                return 1;
+            }
+
+            var ambush = AmbushDemo.Create("scenarios");
+            return RunAndReplay(
+                ambush, () => AmbushDemo.IsOver(ambush), AmbushDemo.Name,
+                options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{AmbushDemo.Name}.jsonl"),
+                () => AmbushDemo.Outcome(ambush), every, maxSeconds);
         }
 
         var dir = Directory.Exists(target) ? target : Path.Combine("scenarios", target);

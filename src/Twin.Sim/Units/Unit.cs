@@ -134,7 +134,10 @@ public sealed class Unit
     /// <see cref="Watch"/> order, the centre of its first S2c observation sector while it follows a squad, otherwise its
     /// direction of movement. North at first.
     /// </summary>
-    public Vec2 WatchDirection { get; internal set; } = new(0, 1);
+    public Vec2 WatchDirection { get; internal set; } = InitialWatchDirection;
+
+    /// <summary>Where every unit watches when it is placed: north.</summary>
+    public static Vec2 InitialWatchDirection { get; } = new(0, 1);
 
     /// <summary>
     /// How the unit moves on terrain, or null for a unit that moves at <see cref="MaxSpeedMps"/> everywhere.

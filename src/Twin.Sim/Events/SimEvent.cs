@@ -19,7 +19,21 @@ public abstract record SimEvent(double Time, string AgentId);
 /// <param name="Time">Simulated time.</param>
 /// <param name="AgentId">The agent.</param>
 /// <param name="Position">Where it stands, on the ground.</param>
-public sealed record AgentPlaced(double Time, string AgentId, Vec3 Position) : SimEvent(Time, AgentId);
+/// <param name="Side">A fighter's side; null for an agent that is not a fighter.</param>
+public sealed record AgentPlaced(double Time, string AgentId, Vec3 Position, Side? Side = null) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// An agent's watch changed during a step (backlog 0004): the direction it watches (<see cref="Units.Unit.WatchDirection"/>),
+/// its observation sectors and whether it also watches the air. Logged for replay viewers.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Direction">Its watch direction, a unit vector.</param>
+/// <param name="Sectors">Its observation sectors, empty if it has none.</param>
+/// <param name="WatchesAir">True if it also watches the air.</param>
+/// <remarks>Record equality compares <paramref name="Sectors"/> by reference; compare them with <c>SequenceEqual</c>.</remarks>
+public sealed record WatchChanged(
+    double Time, string AgentId, Vec2 Direction, IReadOnlyList<Units.ObservationSector> Sectors, bool WatchesAir) : SimEvent(Time, AgentId);
 
 /// <summary>An agent's position changed during a step.</summary>
 /// <param name="Time">Simulated time.</param>
@@ -289,10 +303,19 @@ public sealed record KnownEnemySnapshot(string AgentId, string EnemyId, Vec2 Pos
 /// <param name="HeavilySuppressed">True while it is heavily suppressed.</param>
 /// <param name="DrillStage">Its stage of the drill under fire.</param>
 /// <param name="AwaitingOrders">True from its contact report until a new order.</param>
+/// <param name="Side">A fighter's side; null for an agent that is not a fighter.</param>
 public readonly record struct AgentSnapshot(
     string Id, Vec3 Position, UnitActivity Activity, Health Health = Health.Unhurt, Posture Posture = Posture.Standing,
     bool Suppressed = false, bool HeavilySuppressed = false, ContactDrillStage DrillStage = ContactDrillStage.None,
-    bool AwaitingOrders = false);
+    bool AwaitingOrders = false, Side? Side = null);
+
+/// <summary>Where an agent watches, in a <see cref="WorldSnapshot"/> (see <see cref="WatchChanged"/>).</summary>
+/// <param name="AgentId">The agent.</param>
+/// <param name="Direction">Its watch direction, a unit vector.</param>
+/// <param name="Sectors">Its observation sectors, empty if it has none.</param>
+/// <param name="WatchesAir">True if it also watches the air.</param>
+/// <remarks>Record equality compares <paramref name="Sectors"/> by reference; compare them with <c>SequenceEqual</c>.</remarks>
+public sealed record WatchSnapshot(string AgentId, Vec2 Direction, IReadOnlyList<Units.ObservationSector> Sectors, bool WatchesAir);
 
 /// <summary>The state viewers show: every agent at one moment, ordered by id.</summary>
 /// <param name="TimeSeconds">Simulated time.</param>
@@ -304,4 +327,7 @@ public sealed record WorldSnapshot(double TimeSeconds, IReadOnlyList<AgentSnapsh
 
     /// <summary>Every enemy each agent knows of, ordered by agent and then enemy (backlog 0004 S5a1).</summary>
     public IReadOnlyList<KnownEnemySnapshot> KnownEnemies { get; init; } = [];
+
+    /// <summary>Where every agent watches, ordered by agent.</summary>
+    public IReadOnlyList<WatchSnapshot> Watches { get; init; } = [];
 }
