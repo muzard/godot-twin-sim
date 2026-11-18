@@ -190,8 +190,12 @@ public partial class ReplayHost : Node2D
             var scenario = ScenarioDefinition.Load(scenarioDir);
             _events = EventLog.FromJsonLines(File.ReadAllText(logFile));
             world = scenario.World.World;
-            // A log of another run on the same map (such as the combat demo) does not have this scenario's agent or corridor.
-            corridor = _events.Any(e => e.AgentId == scenario.AgentId) ? scenario.Corridor : null;
+            // A log of another run on the same map (such as the combat demo) does not have this scenario's agent or squad, nor
+            // its corridor.
+            var ofThisScenario = scenario.Squad is { } squad
+                ? _events.OfType<SquadFormed>().Any(f => f.SquadId == squad.Id)
+                : _events.Any(e => e.AgentId == scenario.AgentId);
+            corridor = ofThisScenario ? scenario.Corridor : null;
             title = $"{Path.GetFileName(logFile)} on {Path.GetFileName(Path.TrimEndingDirectorySeparator(scenarioDir))}";
             error = string.Empty;
             return true;

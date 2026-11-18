@@ -99,18 +99,17 @@ with the latest events listed on the right. Keys: space play/pause, left/right â
 home/end; wheel zooms, dragging pans, the slider at the bottom seeks. A log whose file name does not start with its
 scenario needs `--scenario <name>`. The camera starts framed on where the agents start and the corridor.
 
-`./dev replay st1-ambush` (add `--godot` to watch it) runs a built-in ambush (`src/Twin.Headless/AmbushDemo.cs`): the
-backlog 0004 reference squad of nine, in a wedge, starts in the forest on the corridor's second leg and is ordered to B;
-three red fighters with a machine gun lie prone in the copse across the field, watching it. Both sides fire freely at
-enemies they have spotted. It shows what the simulation does today: spotting, spot reports, the squad halting, and each
-fighter's drill under fire; the squad leader does not yet direct fire or manoeuvre (backlog 0004 S5b, S6), so the squad
-stays where it halted. It runs until one side has nobody in action, the leader arrives, or nobody has fired for 120 s
-after the first shot, and writes `replays/st1-ambush.jsonl`. The viewer does not draw a corridor for it (the demo's
-corridor is not the scenario's).
+`./dev replay st1-ambush` (add `--godot` to watch it) runs the scenario `scenarios/st1-ambush` (backlog 0004): the
+reference squad of nine, in a wedge, starts in the forest on the corridor's second leg and is ordered to B; three red
+fighters with a machine gun lie prone in the copse across the field, watching it. Both sides fire freely at enemies they
+have spotted. It shows what the simulation does today: spotting, spot reports, the squad halting, and each fighter's
+drill under fire; the squad leader does not yet direct fire or manoeuvre (backlog 0004 S5b, S6), so the squad stays
+where it halted. A squad scenario runs until its leader arrives or is blocked, one side has nobody in action, or nobody
+has fired for 120 s after the first shot; the log goes to `replays/st1-ambush-Grant.jsonl`.
 
 The viewer draws agents as dots in their side's colour (blue, red; grey for an agent that is not a fighter), smaller the
 lower the posture, ringed orange when pinned, red when wounded and yellow when suppressed, grey with a cross when out of
-action. Each agent's watch direction is a short line, its observation sectors translucent wedges, and a small mark above
+action; a squad leader has a second ring and its squad's id and formation (or `halted`) next to it. Each agent's watch direction is a short line, its observation sectors translucent wedges, and a small mark above
 it shows that it watches the air. A fresh sighting (`EnemySpotted`) is a dashed line to the enemy for 4 s, a spot report a
 ring of the 30 m voice range, and where each side believes an enemy is a hollow diamond with the enemy's id. For this the
 log records each fighter's side in `AgentPlaced` and its watch in `WatchChanged` (direction, sectors, air watch, logged

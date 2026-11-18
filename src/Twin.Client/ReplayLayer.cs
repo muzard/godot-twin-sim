@@ -152,6 +152,30 @@ public partial class ReplayLayer : Node2D
         {
             DrawAgent(agent, watches.GetValueOrDefault(agent.Id), font);
         }
+
+        DrawSquadLeaders(font);
+    }
+
+    /// <summary>
+    /// Each squad's leader gets a second ring, and the squad's id and formation are written next to it (backlog 0004 S2d):
+    /// <c>blue: wedge</c>, or <c>blue: halted</c> while the squad is halted on a spotted enemy.
+    /// </summary>
+    private void DrawSquadLeaders(Font font)
+    {
+        var agents = Snapshot!.Agents.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        foreach (var squad in Snapshot.Squads)
+        {
+            if (squad.LeaderId is not { } leaderId || !agents.TryGetValue(leaderId, out var leader))
+            {
+                continue;
+            }
+
+            var at = _mapper.ToScreen(leader.Position.Xy);
+            var color = SideColor(leader.Side);
+            DrawArc(at, 10f, 0, Mathf.Tau, 32, color, 2f);
+            var state = squad.Halted ? "halted" : squad.Formation.ToString().ToLowerInvariant();
+            DrawString(font, at + new Vector2(12, -10), $"{squad.Id}: {state}", fontSize: 12, modulate: color);
+        }
     }
 
     private static Color SideColor(Side? side) => side switch

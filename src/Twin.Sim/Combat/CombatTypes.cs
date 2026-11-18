@@ -151,6 +151,13 @@ public sealed record WeaponProfile(
 {
     /// <summary>Backlog 0002 infantry rifle, with the backlog 0003 suppression values.</summary>
     public static WeaponProfile Rifle { get; } = new(0.6, 150, 600, 2, 150, 1500, 2);
+
+    /// <summary>
+    /// Machine gun 7.62 with backlog 0003's values (open, to be calibrated): S = 1.5, bursts of 5, 800 m, 500 rounds.
+    /// </summary>
+    public static WeaponProfile MachineGun { get; } = new(
+        HitProbabilityAtZero: 0.6, HitFalloffMeters: 200, MaxRangeMeters: 800, SecondsPerShot: 2, Rounds: 500,
+        SoundRangeMeters: 2000, FlashSeconds: 2, SuppressionPerRound: 1.5, RoundsPerBurst: 5, SnapSecondsPerShot: 1);
 }
 
 /// <summary>What makes an agent a fighter.</summary>
