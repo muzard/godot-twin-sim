@@ -52,8 +52,35 @@ public static class SpecSquad
     public const double LocalSearchMeters = 64;
 
     /// <summary>
-    /// The doctrine of backlog 0004: command delays (reaction 1 s / 3 s, relay 2 s, takeover 5 s) and squad movement
-    /// (10 m interval, 1 m minimum gap, leader at 0.8 ×, halts beyond 20 m, moves on within 5 m, 64 m search window).
+    /// At the forest edge (S2c) the open line stands this far inside the edge. ⚠ Provisional ([PROPOSAL] in backlog 0004).
+    /// </summary>
+    public const double EdgeInsetMeters = 5;
+
+    /// <summary>
+    /// The RJ asks to leave the forest at the latest this long after commanding the deployment at the edge (S2c), even if
+    /// the line has not formed. ⚠ Provisional ([PROPOSAL] in backlog 0004).
+    /// </summary>
+    public const double EdgeDeploymentSeconds = 60;
+
+    /// <summary>
+    /// Members that do not fit the open line at the edge form a further line this much deeper in the forest (S2c).
+    /// ⚠ Provisional: compressing the line may replace this; see backlog 0004, "S2c spec decisions".
+    /// </summary>
+    public const double SecondLineDepthMeters = 10;
+
+    /// <summary>Width of every observation sector (S2c): ±45° about its centre. ⚠ Provisional ([PROPOSAL]).</summary>
+    public const double SectorWidthDegrees = 90;
+
+    /// <summary>
+    /// The text of the RJ's squad command to deploy at the forest edge (S2c), as logged in
+    /// <see cref="Twin.Sim.Events.CommandIssued.Command"/>.
+    /// </summary>
+    public const string DeployAtForestEdgeCommand = "DeployAtForestEdge";
+
+    /// <summary>
+    /// The doctrine of backlog 0004: command delays (reaction 1 s / 3 s, relay 2 s, takeover 5 s), squad movement
+    /// (10 m interval, 1 m minimum gap, leader at 0.8 ×, halts beyond 20 m, moves on within 5 m, 64 m search window) and
+    /// the forest edge and observation (5 m inside the edge, 60 s limit, second line 10 m deeper, 90° sectors).
     /// </summary>
     public static SquadDoctrine Doctrine { get; } = new(
         ExperiencedReactionSeconds: ExperiencedReactionSeconds,
@@ -65,7 +92,11 @@ public static class SpecSquad
         LeaderSpeedFactor: LeaderSpeedFactor,
         StragglerMeters: StragglerMeters,
         RegroupMeters: RegroupMeters,
-        LocalSearchMeters: LocalSearchMeters);
+        LocalSearchMeters: LocalSearchMeters,
+        EdgeInsetMeters: EdgeInsetMeters,
+        EdgeDeploymentSeconds: EdgeDeploymentSeconds,
+        SecondLineDepthMeters: SecondLineDepthMeters,
+        SectorWidthDegrees: SectorWidthDegrees);
 
     /// <summary>The wedge's step back and out between neighbours on an arm: the interval at 45° (7.07 m).</summary>
     public static double WedgeStepMeters => IntervalMeters / Math.Sqrt(2);

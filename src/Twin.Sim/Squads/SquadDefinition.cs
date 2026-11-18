@@ -78,6 +78,12 @@ public enum SquadFormation
 /// <param name="StragglerMeters">The leader halts while a member is farther than this from its slot.</param>
 /// <param name="RegroupMeters">The leader moves on when every member is within this of its slot.</param>
 /// <param name="LocalSearchMeters">Side of the square window around a member in which it searches a way to its slot.</param>
+/// <param name="EdgeInsetMeters">At the forest edge (S2c) the open line stands this far inside the edge. Provisional.</param>
+/// <param name="EdgeDeploymentSeconds">The squad leader asks to leave the forest at the latest this long after commanding
+/// the deployment at the edge (S2c). Provisional.</param>
+/// <param name="SecondLineDepthMeters">Members that do not fit the open line at the edge form a further line this much
+/// deeper in the forest (S2c). Provisional: compressing the line may replace it.</param>
+/// <param name="SectorWidthDegrees">Width of every observation sector (S2c). Provisional.</param>
 public sealed record SquadDoctrine(
     double ExperiencedReactionSeconds = 1,
     double InexperiencedReactionSeconds = 3,
@@ -88,16 +94,18 @@ public sealed record SquadDoctrine(
     double LeaderSpeedFactor = 0.8,
     double StragglerMeters = 20,
     double RegroupMeters = 5,
-    double LocalSearchMeters = 64)
+    double LocalSearchMeters = 64,
+    double EdgeInsetMeters = 5,
+    double EdgeDeploymentSeconds = 60,
+    double SecondLineDepthMeters = 10,
+    double SectorWidthDegrees = 90)
 {
     /// <summary>
     /// The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s; 10 m interval, 1 m minimum gap, leader
-    /// at 0.8 ×, halt beyond 20 m, move on within 5 m, 64 m search window.
+    /// at 0.8 ×, halt beyond 20 m, move on within 5 m, 64 m search window; at the forest edge 5 m inside, 60 s limit,
+    /// second line 10 m deeper; 90° observation sectors.
     /// </summary>
     public static SquadDoctrine Default { get; } = new();
-
-    /// <summary>Where each formation place watches while the squad moves or rests (backlog 0004 S5a1).</summary>
-    public WatchSectors WatchSectors { get; init; } = WatchSectors.Default;
 
     /// <summary>
     /// A spoken spot report reaches squad mates within this distance (backlog 0004 S5a1). ⚠ A placeholder: how far a
@@ -114,31 +122,6 @@ public sealed record SquadDoctrine(
     /// <summary>The reaction time to a command of a member with the given experience.</summary>
     public double ReactionSeconds(Experience experience) =>
         ActsDirectly(experience) ? ExperiencedReactionSeconds : InexperiencedReactionSeconds;
-}
-
-/// <summary>
-/// Each formation place's watch direction (backlog 0004 S5a1), in degrees to the right of the squad's direction of
-/// travel, in formation order (front to back, see <see cref="FormationSlots"/>). A place beyond a table watches ahead.
-/// </summary>
-/// <param name="FileDegrees">The file's places.</param>
-/// <param name="WedgeDegrees">The wedge's places.</param>
-public sealed record WatchSectors(IReadOnlyList<double> FileDegrees, IReadOnlyList<double> WedgeDegrees)
-{
-    /// <summary>
-    /// The starting tables for the nine-member reference squad: in the file the first member and the leader ahead, the
-    /// rest alternately right and left, the last one back; in the wedge the apex and the leader ahead, the arms out to
-    /// their side, the rear corners back left and back right.
-    /// </summary>
-    public static WatchSectors Default { get; } = new(
-        FileDegrees: [0, 90, -90, 0, 90, -90, 90, -90, 180],
-        WedgeDegrees: [0, -45, 45, 0, 90, -90, 90, -135, 135]);
-
-    /// <summary>The watch angle of the place <paramref name="place"/> (0 = front) in <paramref name="formation"/>.</summary>
-    public double DegreesAt(SquadFormation formation, int place)
-    {
-        var table = formation == SquadFormation.Wedge ? WedgeDegrees : FileDegrees;
-        return place >= 0 && place < table.Count ? table[place] : 0;
-    }
 }
 
 /// <summary>How a spot report is passed on (backlog 0004 S5a1). Hand signals come in a later ticket.</summary>

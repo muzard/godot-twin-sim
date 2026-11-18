@@ -14,6 +14,9 @@ public sealed class Squad
     private readonly SortedDictionary<string, SquadMember> _members = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, SquadFormation> _memberFormations = new(StringComparer.Ordinal);
     private readonly SortedSet<string> _detached = new(StringComparer.Ordinal);
+    private readonly SortedSet<string> _knowsOrder = new(StringComparer.Ordinal);
+    private readonly SortedSet<string> _refused = new(StringComparer.Ordinal);
+    private readonly List<Corridors.CrossingPermit> _permits = [];
     private readonly string?[] _teamLeaders;
 
     internal Squad(SquadDefinition definition, string leaderId, IReadOnlyList<string> teamLeaderIds)
@@ -69,6 +72,83 @@ public sealed class Squad
 
     /// <summary>The corridor of the leader's current or last corridor order; null after a plain move order.</summary>
     internal Corridors.Corridor? Corridor { get; set; }
+
+    /// <summary>
+    /// The squad's permits to cross hard boundaries (backlog 0004, S2b): each granted to the leader, for itself or for a
+    /// member, with its radius widened by the formation's half-width when it was asked for, so the squad crosses in
+    /// formation.
+    /// </summary>
+    public IReadOnlyList<Corridors.CrossingPermit> Permits => _permits.AsReadOnly();
+
+    /// <summary>The squad's movement order, as its leader last got it; null when there is none or it is done.</summary>
+    internal Order? MovementOrder { get; private set; }
+
+    /// <summary>When a new leader asked the platoon leader to repeat the movement order; null if it has not.</summary>
+    internal double? OrderRequestedAt { get; set; }
+
+    /// <summary>A member's request to cross a boundary, on its way through the leader to the platoon leader.</summary>
+    internal MemberRequest? PendingRequest { get; set; }
+
+    /// <summary>
+    /// The squad's last open line at the forest edge (S2c). Members stand to it only while its leader's corridor order is
+    /// deployed there (see <see cref="Systems.CorridorProgress.Deployment"/>).
+    /// </summary>
+    internal EdgeLine? EdgeDeployment { get; set; }
+
+    /// <summary>
+    /// True once <paramref name="unitId"/> has heard the squad's current movement order: the leader that got it, and every
+    /// member that has acted on its brief (backlog 0004, S2b).
+    /// </summary>
+    public bool KnowsOrder(string unitId) => _knowsOrder.Contains(unitId);
+
+    /// <summary>The leader got a movement order: it alone knows it until its brief reaches the members.</summary>
+    internal void NewMovementOrder(Order order, string leaderId)
+    {
+        MovementOrder = order;
+        OrderRequestedAt = null;
+        _knowsOrder.Clear();
+        _knowsOrder.Add(leaderId);
+    }
+
+    /// <summary>
+    /// A genuinely new order from the platoon leader: the permits, refusals and any request of the old one lapse (a
+    /// successor carrying the old order on keeps them).
+    /// </summary>
+    internal void StartAfresh()
+    {
+        _permits.Clear();
+        _refused.Clear();
+        PendingRequest = null;
+        EdgeDeployment = null;
+    }
+
+    internal void ClearMovementOrder()
+    {
+        MovementOrder = null;
+        OrderRequestedAt = null;
+        _knowsOrder.Clear();
+    }
+
+    internal void Heard(string unitId, Order order)
+    {
+        if (ReferenceEquals(order, MovementOrder))
+        {
+            _knowsOrder.Add(unitId);
+        }
+    }
+
+    internal void AddPermit(Corridors.CrossingPermit permit) => _permits.Add(permit);
+
+    /// <summary>True if the squad was refused a member's crossing of the boundary under this order: no one asks again.</summary>
+    internal bool WasRefused(string boundaryId) => _refused.Contains(boundaryId);
+
+    internal void Refuse(string boundaryId) => _refused.Add(boundaryId);
+
+    /// <summary>The boundaries refused under this order, in order (for the state hash).</summary>
+    internal IEnumerable<string> Refusals => _refused;
+
+    /// <summary>The members that know the squad's movement order, in order (for the state hash).</summary>
+    internal IEnumerable<string> Knowing => _knowsOrder;
 
     /// <summary>The formation <paramref name="unitId"/> moves in: the last formation command it has acted on.</summary>
     /// <exception cref="KeyNotFoundException">The agent is not in this squad.</exception>
@@ -137,6 +217,13 @@ public sealed class Squad
     }
 
     internal void SetTeamLeader(int team, string? unitId) => _teamLeaders[team] = unitId;
+
+    /// <summary>
+    /// A member asked to cross <paramref name="BoundaryId"/> at <paramref name="At"/>; the leader passes it on after the
+    /// relay time (<paramref name="LeaderAskedAt"/> once it has).
+    /// </summary>
+    internal sealed record MemberRequest(
+        string UnitId, string BoundaryId, Vec2 At, double AskedAt, double? LeaderAskedAt = null, double HalfWidth = 0);
 
     /// <summary>A successor and when it takes over.</summary>
     internal sealed record Takeover(string UnitId, double Due);

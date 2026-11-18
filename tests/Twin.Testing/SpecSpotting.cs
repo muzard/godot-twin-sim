@@ -58,26 +58,11 @@ public static class SpecSpotting
     public static CombatRules Rules { get; } = SpecShooting.Rules with { Observation = Observation };
 
     /// <summary>
-    /// The reference squad in formation order (front to back, backlog 0004 S2a): the order of the
-    /// <see cref="WatchSectors"/> tables.
+    /// The squad doctrine of <see cref="SpecSquad.Doctrine"/> with the voice range. Where squad members watch comes from
+    /// their S2c observation sectors (<see cref="Twin.Sim.Units.Unit.ObservationSectors"/>): each sector's centre is a
+    /// watch direction, and the best angle factor of them counts (merge with S2c, product owner, 2026-11-18).
     /// </summary>
-    public static IReadOnlyList<string> FormationOrder { get; } = ["pj", "k1", "k2", "rj", "j1", "j2", "vj", "kk", "t1"];
-
-    /// <summary>
-    /// Each formation place's watch direction, in degrees to the right of the squad's direction of travel, in formation
-    /// order. File: ahead, then alternately right and left, the RJ ahead, the last one back. Wedge: the apex and the RJ
-    /// ahead, the arms out to their side, the rear corners back left and back right. [PROPOSAL]
-    /// </summary>
-    public static WatchSectors WatchSectors { get; } = new(
-        FileDegrees: [0, 90, -90, 0, 90, -90, 90, -90, 180],
-        WedgeDegrees: [0, -45, 45, 0, 90, -90, 90, -135, 135]);
-
-    /// <summary>The squad doctrine of <see cref="SpecSquad.Doctrine"/> with the watch sectors and the voice range.</summary>
-    public static SquadDoctrine Doctrine { get; } = SpecSquad.Doctrine with
-    {
-        WatchSectors = WatchSectors,
-        VoiceRangeMeters = VoiceRangeMeters,
-    };
+    public static SquadDoctrine Doctrine { get; } = SpecSquad.Doctrine with { VoiceRangeMeters = VoiceRangeMeters };
 
     /// <summary>The base spotting time of an observer with the given experience.</summary>
     public static double BaseSeconds(Experience experience) => experience switch
@@ -104,18 +89,6 @@ public static class SpecSpotting
         double transmission = 1) =>
         BaseSeconds(observer) * (1 + (distanceMeters / ReferenceDistanceMeters)) * angleFactor / SizeFactor(target) /
         transmission;
-
-    /// <summary>The watch angle of the reference squad member <paramref name="unitId"/> in <paramref name="formation"/>.</summary>
-    public static double WatchDegrees(SquadFormation formation, string unitId)
-    {
-        var place = FormationOrder.ToList().IndexOf(unitId);
-        if (place < 0)
-        {
-            throw new ArgumentException($"'{unitId}' is not in the reference squad.", nameof(unitId));
-        }
-
-        return (formation == SquadFormation.Wedge ? WatchSectors.WedgeDegrees : WatchSectors.FileDegrees)[place];
-    }
 
     /// <summary><paramref name="direction"/> turned <paramref name="degreesRight"/> clockwise (to the right), unit length.</summary>
     public static Vec2 Turned(Vec2 direction, double degreesRight)

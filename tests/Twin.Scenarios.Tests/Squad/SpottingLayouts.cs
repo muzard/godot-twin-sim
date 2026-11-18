@@ -2,6 +2,7 @@ using Twin.Sim.Combat;
 using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
 using Twin.Sim.Squads;
+using Twin.Sim.World;
 using Twin.Testing;
 
 namespace Twin.Scenarios.Tests.Squad;
@@ -9,8 +10,14 @@ namespace Twin.Scenarios.Tests.Squad;
 /// <summary>
 /// The reference squad and one hidden enemy for the spotting tests (backlog 0004 S5a1). Red lies prone behind a 0.6 m
 /// mound that hides it prone but not standing; a test makes it stand up when the squad is where it wants it, and the
-/// squad then sees it. Interval 12 m (not the 10 m of <see cref="SpecSquad"/>), so that no squad mate is exactly the
-/// 30 m voice range away from another in file or wedge: with 10 m, the wedge's apex and its third-rank corners are.
+/// squad then sees it. Interval 12 m (not the 10 m of <see cref="SpecSquad"/>), so that no squad mate is exactly the 30 m
+/// voice range away from another in file or wedge.
+/// <para>
+/// Squad members watch their S2c observation sectors (backlog 0004, decision 20): on the move east the wedge's apex j1
+/// watches ahead, its left arm (t1, vj, kk, rj) north and its right arm (j2, pj, k1, k2) south, t1 and k2 also back
+/// (west). In the file pj watches ahead, then the places alternate left and right: k1 left, k2 right, rj left, j1 right,
+/// j2 left, vj right, kk left, t1 right, and kk and t1 also back.
+/// </para>
 /// </summary>
 internal static class SpottingLayouts
 {
@@ -21,70 +28,75 @@ internal static class SpottingLayouts
 
     public static readonly TimeSpan TenMinutes = TimeSpan.FromMinutes(10);
 
-    /// <summary>Members of the wedge's left arm (backlog 0004 S2a): k1, j2, kk.</summary>
-    public static readonly string[] WedgeLeftArm = ["k1", "j2", "kk"];
+    /// <summary>The wedge's left arm (backlog 0004, S2c): t1, vj, kk and the squad leader rj, observing left.</summary>
+    public static readonly string[] WedgeLeftArm = ["t1", "vj", "kk", "rj"];
 
-    /// <summary>Members of the wedge's right arm: k2, j1, vj, t1.</summary>
-    public static readonly string[] WedgeRightArm = ["k2", "j1", "vj", "t1"];
+    /// <summary>The wedge's right arm: j2, pj, k1, k2, observing right. (j1 is the apex.)</summary>
+    public static readonly string[] WedgeRightArm = ["j2", "pj", "k1", "k2"];
 
     public static IEnumerable<string> Members => SpecSquad.Reference().Members.Select(m => m.UnitId);
 
-    private static Scenario Squad(SquadFormation formation, Vec2 at, Func<TestMap, TestMap> mound, Vec2 red) =>
+    private static Scenario Squad(
+        SquadFormation formation, Vec2 at, Func<TestMap, TestMap> terrain, Vec2 red, double voiceRangeMeters = SpecSpotting.VoiceRangeMeters) =>
         Scenario.ForSquadSpotting()
-            .WithSquadDoctrine(SpecSpotting.Doctrine with { IntervalMeters = IntervalMeters })
-            .WithTerrain(mound(TestMap.Create(widthMeters: 500, heightMeters: 200)).Build())
+            .WithSquadDoctrine(SpecSpotting.Doctrine with { IntervalMeters = IntervalMeters, VoiceRangeMeters = voiceRangeMeters })
+            .WithTerrain(terrain(TestMap.Create(widthMeters: 500, heightMeters: 200)).Build())
             .WithSquad(SpecSquad.Reference() with { Formation = formation }, at)
             .WithFighter("red", red, Side.Red, RulesOfEngagement.HoldFire);
 
-    /// <summary>
-    /// The wedge has moved east from (80, 101) to (200, 101) and settled there, red unseen. Red lies at (185, 41), south
-    /// of the squad and a little behind its leader: outside the field of view of the apex, the leader and the left arm,
-    /// in the focus of vj (watching right, 35 m away). From vj's report point, rj, j1, k2 and t1 are within 30 m; pj, k1,
-    /// j2 and kk are not.
-    /// </summary>
-    public static ScenarioRun FlankAtRest()
+    private static ScenarioRun SettledAt(this Scenario scenario, Vec2 destination)
     {
-        var sim = Squad(SquadFormation.Wedge, new Vec2(80, 101),
-                m => m.WithMound(fromX: 165, fromY: 45, toX: 205, toY: 47, height: 0.6), new Vec2(185, 41))
-            .Build()
-            .Order("red", new SetPosture(Posture.Prone));
-        sim.Order("rj", new MoveTo(new Vec2(200, 101))).RunUntilSquadSettled("r1", TenMinutes);
+        var sim = scenario.Build().Order("red", new SetPosture(Posture.Prone));
+        sim.Order("rj", new MoveTo(destination)).RunUntilSquadSettled("r1", TenMinutes);
         return sim;
     }
 
     /// <summary>
-    /// The file has moved east from (300, 101) to (400, 101) and settled there, red unseen: t1 at x = 340 watches back,
-    /// kk 352, vj 364, j2 376, j1 388, rj 400. Red lies at (201, 91), behind the squad and 10 m to the right of its axis:
-    /// in the focus of t1 only (139 m), outside the field of view of everyone watching left or ahead.
+    /// The wedge has moved east from (80, 101) to (200, 101) and settled there, red unseen: j1 (apex) at (208.5, 92.5),
+    /// rj (200, 101), j2 (200, 84), pj (191.5, 75.5), k1 (183, 67), k2 (174.5, 58.6), and the left arm north-west of rj.
+    /// Red lies at (215, 21), south of the squad: in the focus of j2 (watching south, 65 m away), elsewhere in the field
+    /// of view of pj, k1, k2 and the apex, outside that of the left arm. From j2, rj, j1, pj, kk and k1 are within 30 m;
+    /// vj, k2 and t1 are not.
     /// </summary>
-    public static ScenarioRun RearInFile()
-    {
-        var sim = Squad(SquadFormation.File, new Vec2(300, 101),
+    public static ScenarioRun FlankAtRest() =>
+        Squad(SquadFormation.Wedge, new Vec2(80, 101),
+                m => m.WithMound(fromX: 195, fromY: 25, toX: 235, toY: 27, height: 0.6), new Vec2(215, 21))
+            .SettledAt(new Vec2(200, 101));
+
+    /// <summary>
+    /// The file has moved east from (300, 101) to (400, 101) and settled there, red unseen: t1 at x = 340, kk 352,
+    /// vj 364, j2 376, j1 388, rj 400. Red lies at (201, 91), behind the squad: in the focus of the rear sectors of t1 and
+    /// kk, the last two, 139 m and 151 m away; outside the field of view of everyone watching left or ahead.
+    /// </summary>
+    public static ScenarioRun BehindTheFile() =>
+        Squad(SquadFormation.File, new Vec2(300, 101),
                 m => m.WithMound(fromX: 205, fromY: 81, toX: 207, toY: 101, height: 0.6), new Vec2(201, 91))
-            .Build()
-            .Order("red", new SetPosture(Posture.Prone));
-        sim.Order("rj", new MoveTo(new Vec2(400, 101))).RunUntilSquadSettled("r1", TenMinutes);
-        return sim;
-    }
+            .SettledAt(new Vec2(400, 101));
 
     /// <summary>
-    /// The file of <see cref="RearInFile"/> (t1 x = 340, kk 352, vj 364, j2 376, j1 388, rj 400, k2 412, k1 424, pj 436)
-    /// with red at (361, 41), 60 m south of vj: in vj's focus (watching right), in the field of view of j1 and k1 (also
-    /// watching right, farther off), outside everyone else's. With <paramref name="voiceRangeMeters"/> below the 12 m
-    /// interval nobody hears anybody.
+    /// The file has moved east from (300, 181) to (400, 181) and settled there, red unseen: t1 at x = 340, kk 352,
+    /// vj 364, j2 376, j1 388, rj 400, k2 412. Red lies at (327, 61), 120 m south of the file's tail: in the focus of t1
+    /// (watching right), elsewhere in the field of view of vj (right) and kk (rear), slower. A building block near red
+    /// hides it from k2 and j1, which would otherwise spot and report it themselves before the relays below reach rj:
+    /// t1's report is heard by kk and vj; vj, the nearer to rj, repeats it to j2 and j1; j1 repeats it to rj.
     /// </summary>
-    public static ScenarioRun RightOfFile(double voiceRangeMeters)
-    {
-        var sim = Scenario.ForSquadSpotting()
-            .WithSquadDoctrine(SpecSpotting.Doctrine with { IntervalMeters = IntervalMeters, VoiceRangeMeters = voiceRangeMeters })
-            .WithTerrain(TestMap.Create(widthMeters: 500, heightMeters: 200).WithMound(fromX: 341, fromY: 45, toX: 381, toY: 47, height: 0.6).Build())
-            .WithSquad(SpecSquad.Reference() with { Formation = SquadFormation.File }, new Vec2(300, 101))
-            .WithFighter("red", new Vec2(361, 41), Side.Red, RulesOfEngagement.HoldFire)
-            .Build()
-            .Order("red", new SetPosture(Posture.Prone));
-        sim.Order("rj", new MoveTo(new Vec2(400, 101))).RunUntilSquadSettled("r1", TenMinutes);
-        return sim;
-    }
+    public static ScenarioRun BesideTheFileTail() =>
+        Squad(SquadFormation.File, new Vec2(300, 181),
+                m => m.WithMound(fromX: 319, fromY: 63, toX: 339, toY: 65, height: 0.6)
+                    .Fill(TerrainClass.Building, fromX: 330, fromY: 66, toX: 334, toY: 68),
+                new Vec2(327, 61))
+            .SettledAt(new Vec2(400, 181));
+
+    /// <summary>
+    /// The file of <see cref="BehindTheFile"/> (t1 x = 340, kk 352, vj 364, j2 376, j1 388, rj 400, k2 412, k1 424,
+    /// pj 436) with red at (361, 41), 60 m south of vj: in vj's focus (watching right), in the field of view of the
+    /// others watching right, farther off, outside the field of view of those watching left or ahead. With
+    /// <paramref name="voiceRangeMeters"/> below the 12 m interval nobody hears anybody.
+    /// </summary>
+    public static ScenarioRun RightOfFile(double voiceRangeMeters) =>
+        Squad(SquadFormation.File, new Vec2(300, 101),
+                m => m.WithMound(fromX: 341, fromY: 45, toX: 381, toY: 47, height: 0.6), new Vec2(361, 41), voiceRangeMeters)
+            .SettledAt(new Vec2(400, 101));
 
     /// <summary>
     /// The wedge moves east from (80, 101) toward <see cref="Destination"/>; red lies at (285, 41), ahead and to the right

@@ -1,4 +1,5 @@
 using Twin.Sim.Combat;
+using Twin.Sim.Command;
 using Twin.Sim.Events;
 using Twin.Sim.Orders;
 using Twin.Sim.Squads;
@@ -32,6 +33,7 @@ public sealed class SquadSystem : ISimSystem
             Deliver(simulation, squad);
             FillTeamLeaders(simulation, squad);
             FillLeader(simulation, squad);
+            RepeatOrder(simulation, squad);
         }
     }
 
@@ -126,6 +128,12 @@ public sealed class SquadSystem : ISimSystem
             case SetSquadFormation formation:
                 squad.SetMemberFormation(unit.Id, formation.Formation);
                 break;
+            case MoveTo or MoveThroughCorridor:
+                squad.Heard(unit.Id, command); // the movement order brief: the member now knows the squad's order
+                break;
+            case DeployAtForestEdge when squad.EdgeDeployment is { } line && ReferenceEquals(line.Command, command):
+                line.Acted.Add(unit.Id); // it moves to its spot in the open line (S2c)
+                break;
             default:
                 break;
         }
@@ -169,6 +177,7 @@ public sealed class SquadSystem : ISimSystem
             }
 
             squad.LeaderId = null;
+            squad.PendingRequest = null; // a member's request dies with the leader who heard it; the member asks again
         }
 
         var successor = SuccessionOrder(squad).FirstOrDefault(id => !IsOut(simulation, id));
@@ -178,7 +187,49 @@ public sealed class SquadSystem : ISimSystem
         {
             squad.LeaderId = takesOver;
             simulation.Log(new LeaderChanged(now, takesOver, squad.Id));
+            if (squad.MovementOrder is { } order)
+            {
+                if (squad.KnowsOrder(takesOver))
+                {
+                    GiveOrder(simulation, simulation.GetUnit(takesOver), order); // it heard the brief: it carries on (S2b)
+                }
+                else
+                {
+                    squad.OrderRequestedAt = now; // it did not: it asks the platoon leader
+                    simulation.Log(new OrderRequested(now, takesOver, squad.Id));
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// The platoon leader repeats the squad's movement order to a new leader that asked for it, after its delay (S2b); the
+    /// new leader then carries it on and briefs its squad. A platoon leader that never answers never repeats it.
+    /// </summary>
+    private static void RepeatOrder(Simulation simulation, Squad squad)
+    {
+        if (squad.OrderRequestedAt is not { } askedAt || squad.LeaderId is not { } leaderId || squad.MovementOrder is not { } order ||
+            simulation.Config.Leader is not { Answer: not LeaderAnswer.NoAnswer } platoonLeader ||
+            simulation.TimeSeconds < askedAt + platoonLeader.DelaySeconds - CombatQueries.TimeEpsilon)
+        {
+            return;
+        }
+
+        var leader = simulation.GetUnit(leaderId);
+        simulation.Log(new OrderRepeated(simulation.TimeSeconds, leaderId, squad.Id));
+        squad.OrderRequestedAt = null;
+        squad.Heard(leaderId, order); // members that heard the old brief still know it
+        GiveOrder(simulation, leader, order);
+        Command(simulation, squad, leader, order);
+    }
+
+    /// <summary>The new leader takes the squad's order as an order of its own: it ends a drill under fire, as any order does.</summary>
+    private static void GiveOrder(Simulation simulation, Unit leader, Order order)
+    {
+        ContactDrillSystem.End(simulation, leader);
+        ContactDrillSystem.Answer(leader);
+        CombatQueries.EndOrder(leader);
+        leader.CurrentOrder = order;
     }
 
     /// <summary>

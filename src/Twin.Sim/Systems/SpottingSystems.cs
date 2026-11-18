@@ -10,9 +10,10 @@ namespace Twin.Sim.Systems;
 /// <summary>
 /// Watching and spotting (backlog 0004 S5a1). First every agent's watch direction is set: toward its nearest attacker in
 /// the drill under fire; while it stands still, toward the last known position of the enemy it learned of last (moving
-/// on ends that); the direction of its last <see cref="Orders.Watch"/> order until its next order; its formation place's sector
-/// (<see cref="SquadDoctrine.WatchSectors"/>) relative to the squad's direction of travel while it follows a squad;
-/// otherwise its direction of movement, or unchanged. Then every fighter watches every enemy it has not spotted yet: an
+/// on ends that); the direction of its last <see cref="Orders.Watch"/> order until its next order; while it follows a
+/// squad, its S2c observation sectors (<see cref="Unit.ObservationSectors"/>, backlog 0004 decision 20): it watches the
+/// centre of each, the first one being its <see cref="Unit.WatchDirection"/>; otherwise its direction of movement, or
+/// unchanged. Then every fighter watches every enemy it has not spotted yet: an
 /// enemy in its field of view and visible builds up spotting progress <c>dt / t_spot</c> under the conditions of the
 /// moment (<see cref="ObservationRules"/>) and is spotted at 1; a muzzle flash in the field of view spots its shooter at
 /// once; leaving the field of view or the line of sight starts the progress again. A spotted enemy is known
@@ -60,7 +61,10 @@ public sealed class SpottingSystem : ISimSystem
     private static void Observe(
         Simulation simulation, ObservationRules rules, Unit observer, Combatant combatant, Unit target, double dt)
     {
-        var angle = AngleDegrees(observer.WatchDirection, target.Position.Xy - observer.Position.Xy);
+        var toTarget = target.Position.Xy - observer.Position.Xy;
+        var angle = observer.WatchesSectors
+            ? observer.ObservationSectors.Min(s => AngleDegrees(s.Centre, toTarget)) // the best sector counts
+            : AngleDegrees(observer.WatchDirection, toTarget);
         if (angle >= rules.FieldOfViewHalfAngleDegrees)
         {
             observer.SpotProgress.Remove(target.Id); // looked away: the time starts again
@@ -119,22 +123,17 @@ public sealed class SpottingSystem : ISimSystem
 
     private static void Watch(Simulation simulation)
     {
-        var travel = new SortedDictionary<string, Vec2?>(StringComparer.Ordinal);
-        foreach (var squad in simulation.Squads)
-        {
-            travel.Add(squad.Id, SquadSlots.TravelDirection(simulation, squad));
-        }
-
         foreach (var unit in simulation.Units)
         {
-            if (WatchToward(simulation, unit, travel) is { } direction && direction.Length > 1e-9)
+            unit.WatchesSectors = false;
+            if (WatchToward(simulation, unit) is { } direction && direction.Length > 1e-9)
             {
                 unit.WatchDirection = direction.Normalized();
             }
         }
     }
 
-    private static Vec2? WatchToward(Simulation simulation, Unit unit, SortedDictionary<string, Vec2?> travel)
+    private static Vec2? WatchToward(Simulation simulation, Unit unit)
     {
         var here = unit.Position.Xy;
         if (unit.Drill is not null && CombatQueries.Attackers(simulation, unit)
@@ -159,20 +158,13 @@ public sealed class SpottingSystem : ISimSystem
             return null; // ordered to watch this way
         }
 
-        if (simulation.SquadOf(unit.Id) is { } squad && squad.IsFollowing(unit.Id) && travel[squad.Id] is { } heading)
+        if (simulation.SquadOf(unit.Id) is { } squad && squad.IsFollowing(unit.Id) && unit.ObservationSectors.Count > 0)
         {
-            var place = FormationSlots.FormationOrder(squad.Definition).FindIndex(m => m.UnitId == unit.Id);
-            return Turned(heading, simulation.Config.SquadDoctrine.WatchSectors.DegreesAt(squad.FormationOf(unit.Id), place));
+            unit.WatchesSectors = true;
+            return unit.ObservationSectors[0].Centre;
         }
 
         return moving ? unit.Velocity.Xy : null;
-    }
-
-    /// <summary><paramref name="direction"/> turned <paramref name="degreesRight"/> clockwise.</summary>
-    private static Vec2 Turned(Vec2 direction, double degreesRight)
-    {
-        var a = degreesRight * Math.PI / 180;
-        return new Vec2((direction.X * Math.Cos(a)) + (direction.Y * Math.Sin(a)), (-direction.X * Math.Sin(a)) + (direction.Y * Math.Cos(a)));
     }
 }
 

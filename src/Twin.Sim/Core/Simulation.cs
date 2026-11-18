@@ -40,7 +40,7 @@ public sealed class Simulation
         [
             new CombatStatusSystem(), new SquadFollowSystem(), new SquadCohesionSystem(), new MovementSystem(),
             new CorridorMovementSystem(), new ContactDrillSystem(), new SpottingSystem(), new SpotReportSystem(),
-            new FireSystem(), new SquadSystem(),
+            new FireSystem(), new SquadSystem(), new ObservationSystem(),
         ];
     }
 
@@ -264,6 +264,12 @@ public sealed class Simulation
                 detachedFrom.Detach(unitId); // any order straight to a member takes it out of the squad's movement
             }
 
+            if (order is not (SetPosture or SetSquadPosture or SetSquadFormation) && SquadOf(unitId) is { } waiting &&
+                waiting.LeaderId == unitId)
+            {
+                waiting.OrderRequestedAt = null; // an order of its own replaces asking for the old one
+            }
+
             switch (order)
             {
                 case SetPosture posture:
@@ -303,10 +309,12 @@ public sealed class Simulation
                     CombatQueries.EndOrder(unit);
                     StandDown(unit);
                     unit.CurrentOrder = order is Stop ? null : order;
-                    if (order is MoveTo or MoveThroughCorridor && SquadOf(unitId) is { IsHalted: true } halted &&
-                        halted.LeaderId == unitId)
+                    if (order is MoveTo or MoveThroughCorridor && SquadOf(unitId) is { } led && led.LeaderId == unitId)
                     {
-                        SquadAlerts.Resume(this, halted, unit, newOrder: order); // a new movement order ends the halt
+                        SquadAlerts.Resume(this, led, unit, newOrder: order); // a new movement order ends a halt (S5a1)
+                        led.StartAfresh();
+                        led.NewMovementOrder(order, unitId);
+                        SquadSystem.Command(this, led, unit, order); // the leader briefs its squad (backlog 0004, S2b)
                     }
 
                     break;
@@ -595,6 +603,8 @@ public sealed class Simulation
                 hash.Add(position.X);
                 hash.Add(position.Y);
             }
+            hash.Add(unit.Heading.X);
+            hash.Add(unit.Heading.Y);
         }
 
         foreach (var squad in _squads.Values)
@@ -636,6 +646,37 @@ public sealed class Simulation
                 hash.Add(squad.IsFollowing(member.UnitId) ? 1 : 0);
             }
 
+            hash.Add(squad.Permits.Count);
+            foreach (var permit in squad.Permits)
+            {
+                hash.Add(permit.BoundaryId);
+                hash.Add(permit.At.X);
+                hash.Add(permit.At.Y);
+                hash.Add(permit.Radius);
+            }
+
+            foreach (var id in squad.Knowing.Concat(squad.Refusals))
+            {
+                hash.Add(id);
+            }
+
+            hash.Add(squad.MovementOrder?.ToString() ?? "none");
+            hash.Add(squad.OrderRequestedAt ?? -1);
+            hash.Add(squad.PendingRequest?.ToString() ?? "none");
+            if (squad.EdgeDeployment is { } line)
+            {
+                foreach (var (id, spot) in line.Spots)
+                {
+                    hash.Add(id);
+                    hash.Add(spot.X);
+                    hash.Add(spot.Y);
+                }
+
+                foreach (var id in line.Acted)
+                {
+                    hash.Add(id);
+                }
+            }
             foreach (var delivery in squad.Deliveries)
             {
                 hash.Add(delivery.UnitId);

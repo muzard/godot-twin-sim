@@ -1,4 +1,5 @@
 using Twin.Sim.Corridors;
+using Twin.Sim.Events;
 using Twin.Sim.Geometry;
 using Twin.Sim.Movement;
 using Twin.Sim.Orders;
@@ -52,6 +53,12 @@ public sealed class SquadCohesionSystem : ISimSystem
                     break;
             }
 
+            if (squad.MovementOrder is not null && squad.OrderRequestedAt is null && leader.Health != Combat.Health.OutOfAction &&
+                leader.Drill is null && leader.CurrentOrder is not (MoveTo or MoveThroughCorridor))
+            {
+                squad.ClearMovementOrder(); // done, or stopped: a successor has nothing to carry on
+            }
+
             if (!squad.MovementStarted)
             {
                 continue;
@@ -69,8 +76,72 @@ public sealed class SquadCohesionSystem : ISimSystem
                 leader.SquadSpeedFactor = doctrine.LeaderSpeedFactor; // not in 0003's drill, where it rushes like anyone
             }
 
-            squad.LeaderHeld = Held(simulation, squad, leaderId, doctrine);
+            AnswerMemberRequest(simulation, squad, leaderId);
+            squad.LeaderHeld = squad.PendingRequest is not null || Held(simulation, squad, leaderId, doctrine);
             leader.HeldBySquad = squad.LeaderHeld;
+        }
+    }
+
+    /// <summary>
+    /// A member's request to cross a boundary (S2b): after the relay time the leader asks the platoon leader (the scripted
+    /// leader), unless a squad permit already covers it; a grant becomes a squad permit, a denial or timeout leaves the
+    /// member on its side.
+    /// </summary>
+    private static void AnswerMemberRequest(Simulation simulation, Squad squad, string leaderId)
+    {
+        if (squad.PendingRequest is not { } request)
+        {
+            return;
+        }
+
+        var now = simulation.TimeSeconds;
+        if (!squad.IsFollowing(request.UnitId) || simulation.GetUnit(request.UnitId).Health == Combat.Health.OutOfAction)
+        {
+            squad.PendingRequest = null;
+            return;
+        }
+
+        if (request.LeaderAskedAt is not { } askedAt)
+        {
+            if (now >= request.AskedAt + simulation.Config.SquadDoctrine.RelaySeconds - 1e-9)
+            {
+                if (squad.Permits.Any(p => p.Covers(request.BoundaryId, request.At)))
+                {
+                    squad.PendingRequest = null;
+                }
+                else
+                {
+                    simulation.Log(new PermissionRequested(now, leaderId, request.BoundaryId, request.At));
+                    squad.PendingRequest = request with { LeaderAskedAt = now, HalfWidth = SquadSlots.HalfWidth(simulation, squad) };
+                }
+            }
+
+            return;
+        }
+
+        var platoonLeader = simulation.Config.Leader;
+        var timeout = simulation.Config.Permission.TimeoutSeconds;
+        var waited = now - askedAt;
+        if (platoonLeader is { Answer: not Command.LeaderAnswer.NoAnswer } && platoonLeader.DelaySeconds <= timeout &&
+            waited >= platoonLeader.DelaySeconds - 1e-9)
+        {
+            simulation.Log(new PermissionAnswered(now, leaderId, request.BoundaryId, platoonLeader.Answer));
+            if (platoonLeader.Answer == Command.LeaderAnswer.Grant)
+            {
+                squad.AddPermit(new CrossingPermit(request.BoundaryId, request.At, platoonLeader.PermitRadiusMeters + request.HalfWidth));
+            }
+            else
+            {
+                squad.Refuse(request.BoundaryId);
+            }
+
+            squad.PendingRequest = null;
+        }
+        else if (waited >= timeout - 1e-9)
+        {
+            simulation.Log(new PermissionTimedOut(now, leaderId, request.BoundaryId));
+            squad.Refuse(request.BoundaryId);
+            squad.PendingRequest = null;
         }
     }
 
@@ -83,6 +154,7 @@ public sealed class SquadCohesionSystem : ISimSystem
 
         var anyFar = false;
         var allNear = true;
+        var deployingAtEdge = SquadSlots.GoingToDeployAtEdge(simulation, squad);
         foreach (var member in squad.Members)
         {
             if (member.UnitId == leaderId || !squad.IsFollowing(member.UnitId))
@@ -94,6 +166,12 @@ public sealed class SquadCohesionSystem : ISimSystem
             if (SquadSlots.IsCasualty(unit))
             {
                 return true;
+            }
+
+            if (deployingAtEdge && SquadSlots.FirstUnpermittedCrossing(simulation, squad, [unit.Position.Xy, slots[member.UnitId]])
+                is { BoundaryId: HardBoundary.ForestEdgeId })
+            {
+                continue; // it waits at the edge for the leader to come up and deploy the squad (S2c)
             }
 
             var distance = unit.Position.Xy.DistanceTo(slots[member.UnitId]);
@@ -215,7 +293,31 @@ public sealed class SquadFollowSystem : ISimSystem
         var corridor = squad.Corridor is { } inside && Segments.DistanceToPolyline(position, inside.Centerline) <= inside.OuterLimit
             ? inside
             : null;
-        List<Vec2>? route = StraightUsable(simulation, member, profile, corridor, position, slot)
+        var goRound = false;
+        if (corridor is not null && CrossingAhead(simulation, squad, position, slot) is var (crossing, stopAt))
+        {
+            if (squad.WasRefused(crossing.BoundaryId))
+            {
+                goRound = true; // refused under this order: it finds a way round, which the path search keeps to
+            }
+            else if (position.DistanceTo(stopAt) > 1e-9)
+            {
+                slot = stopAt; // S2b: it walks up to the boundary first
+            }
+            else if (crossing.BoundaryId == HardBoundary.ForestEdgeId && SquadSlots.GoingToDeployAtEdge(simulation, squad))
+            {
+                member.Velocity = Vec3.Zero; // the leader deploys the squad at the edge and asks for it (S2c)
+                CombatQueries.SetActivity(member, UnitActivity.Idle);
+                return;
+            }
+            else
+            {
+                WaitForPermission(simulation, squad, member, crossing); // then waits there and asks the leader
+                return;
+            }
+        }
+
+        List<Vec2>? route = !goRound && StraightUsable(simulation, member, profile, corridor, position, slot)
             ? [position, slot]
             : LocalRoute(simulation, member, profile, corridor, position, slot);
         if (route is null)
@@ -250,16 +352,71 @@ public sealed class SquadFollowSystem : ISimSystem
         CombatQueries.SetActivity(member, UnitActivity.Moving);
     }
 
-    /// <summary>True if the straight move stays on passable ground inside the corridor and crosses no cliff.</summary>
+    /// <summary>A member stops this short of a boundary it may not cross yet, in metres.</summary>
+    private const double StopShortMeters = 0.25;
+
+    /// <summary>
+    /// The first boundary the squad has no permit for on the straight way from the member to its slot, with the point where
+    /// the member stops short of it: just before a drawn line, or at the last point still inside the forest. Null if none.
+    /// </summary>
+    private static (BoundaryCrossing Crossing, Vec2 StopAt)? CrossingAhead(Simulation simulation, Squad squad, Vec2 from, Vec2 to)
+    {
+        var samples = Math.Max(1, (int)Math.Ceiling(from.DistanceTo(to) / SampleMeters));
+        var previous = from;
+        for (var i = 1; i <= samples; i++)
+        {
+            var point = from + ((to - from) * ((double)i / samples));
+            if (SquadSlots.FirstUnpermittedCrossing(simulation, squad, [previous, point]) is { } crossing)
+            {
+                if (crossing.BoundaryId == HardBoundary.ForestEdgeId)
+                {
+                    return (crossing, previous);
+                }
+
+                var before = Math.Max(0, from.DistanceTo(crossing.At) - StopShortMeters);
+                return (crossing, from + ((to - from).Normalized() * before));
+            }
+
+            previous = point;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The member waits at a boundary for permission (S2b). It asks the leader unless a request is already on its way.
+    /// </summary>
+    private static void WaitForPermission(Simulation simulation, Squad squad, Unit member, BoundaryCrossing crossing)
+    {
+        member.Velocity = Vec3.Zero;
+        CombatQueries.SetActivity(member, UnitActivity.WaitingForPermission);
+        if (squad.PendingRequest is null)
+        {
+            squad.PendingRequest = new Squad.MemberRequest(member.Id, crossing.BoundaryId, crossing.At, simulation.TimeSeconds);
+            simulation.Log(new PermissionRequested(simulation.TimeSeconds, member.Id, crossing.BoundaryId, crossing.At));
+        }
+    }
+
+    /// <summary>True if the straight move stays on passable ground inside the corridor and crosses no cliff or unpermitted boundary.</summary>
     private static bool StraightUsable(Simulation simulation, Unit member, MovementProfile profile, Corridor? corridor, Vec2 from, Vec2 to)
     {
         var samples = (int)Math.Ceiling(from.DistanceTo(to) / SampleMeters);
+        var points = new List<Vec2>(samples + 1) { from };
         for (var i = 1; i <= samples; i++)
         {
-            if (!SquadSlots.CanStand(simulation, member, corridor, from + ((to - from) * ((double)i / samples))))
+            var point = from + ((to - from) * ((double)i / samples));
+            if (!SquadSlots.CanStand(simulation, member, corridor, point))
             {
                 return false;
             }
+
+            points.Add(point);
+        }
+
+        if (corridor is not null && simulation.SquadOf(member.Id) is { } squad &&
+            SquadSlots.FirstUnpermittedCrossing(simulation, squad, points) is not null)
+        {
+            return false; // it would cross a boundary the squad has no permit for
         }
 
         return simulation.Terrain is not IWorldQuery world || !Pathfinder.CrossesCliff(world, profile, [from, to]);
@@ -287,7 +444,7 @@ public sealed class SquadFollowSystem : ISimSystem
             return null;
         }
 
-        var options = new PathOptions(corridor, SquadPermits(simulation, member), Window: window);
+        var options = new PathOptions(corridor, simulation.SquadOf(member.Id)?.Permits ?? [], Window: window);
         foreach (var start in NearbyCellCenters(world, from))
         {
             if (!StraightUsable(simulation, member, profile, corridor, from, start))
@@ -325,10 +482,6 @@ public sealed class SquadFollowSystem : ISimSystem
         }
 
         return null;
-
-        static IReadOnlyList<CrossingPermit> SquadPermits(Simulation simulation, Unit member) =>
-            simulation.SquadOf(member.Id) is { LeaderId: { } leaderId } &&
-            simulation.GetUnit(leaderId).CorridorProgress is { } progress ? progress.Permits : [];
     }
 
     /// <summary>

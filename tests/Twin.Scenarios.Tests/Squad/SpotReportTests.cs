@@ -19,33 +19,33 @@ public class SpotReportTests
     public void SP8_the_spotter_crouches_as_soon_as_it_spots_the_enemy()
     {
         var sim = SpottingLayouts.FlankAtRest();
-        var spotted = sim.RedStandsUp().RunUntilSpotted("vj", "red", OneMinute);
+        var spotted = sim.RedStandsUp().RunUntilSpotted("j2", "red", OneMinute);
 
         sim.RunUntil(s => s.TimeSeconds >= spotted.Time + SpecShooting.Rules.PostureChangeSeconds + s.Simulation.Config.TickSeconds - 1e-9,
             OneMinute, "a posture change later");
 
-        sim.Unit("vj").Should().BeIn(Posture.Crouching);
+        sim.Unit("j2").Should().BeIn(Posture.Crouching);
     }
 
     [Fact]
     public void SP8_an_experienced_spotter_reports_after_its_reaction_delay()
     {
         var sim = SpottingLayouts.FlankAtRest();
-        var spotted = sim.RedStandsUp().RunUntilSpotted("vj", "red", OneMinute);
+        var spotted = sim.RedStandsUp().RunUntilSpotted("j2", "red", OneMinute);
 
         sim.RunUntil(s => s.ReportsOf("red").Count > 0, OneMinute, "a report of red");
 
         var report = sim.ReportsOf("red")[0];
-        Assert.Equal("vj", report.AgentId);
+        Assert.Equal("j2", report.AgentId);
         Assert.Equal(ReportMethod.Voice, report.Method);
         Assert.Equal(sim.Unit("red").Position.Xy, report.EnemyPosition);
-        sim.ShouldBeAt(report, SpecSquad.ExperiencedReactionSeconds, spotted.Time, "vj's report");
+        sim.ShouldBeAt(report, SpecSquad.ExperiencedReactionSeconds, spotted.Time, "j2's report");
     }
 
     [Fact]
     public void SP8_an_inexperienced_spotter_reports_after_its_longer_reaction_delay()
     {
-        var sim = SpottingLayouts.RearInFile();
+        var sim = SpottingLayouts.BesideTheFileTail();
         var spotted = sim.RedStandsUp().RunUntilAnyoneSpots("red", OneMinute);
         Assert.Equal("t1", spotted.AgentId);
         Assert.Equal(SpecSquad.Inexperienced, sim.Unit("t1").Combatant!.Experience);
@@ -62,10 +62,10 @@ public class SpotReportTests
         sim.RedStandsUp().RunUntil(s => s.ReportsOf("red").Count > 0, OneMinute, "a report of red");
         var report = sim.ReportsOf("red")[0];
 
-        foreach (var id in new[] { "rj", "j1", "k2", "t1" })
+        foreach (var id in new[] { "rj", "j1", "pj", "kk", "k1" })
         {
-            var received = sim.ReceivedFrom(id, "vj");
-            Assert.True(received is not null, $"{id} is within {SpecSpotting.VoiceRangeMeters} m of vj and should hear its report");
+            var received = sim.ReceivedFrom(id, "j2");
+            Assert.True(received is not null, $"{id} is within {SpecSpotting.VoiceRangeMeters} m of j2 and should hear its report");
             Assert.Equal(report.Time, received.Time);
             Assert.Equal("red", received.EnemyId);
             Assert.Equal(report.EnemyPosition, received.EnemyPosition);
@@ -80,22 +80,25 @@ public class SpotReportTests
 
         sim.RedStandsUp().RunFor(TimeSpan.FromMinutes(2));
 
-        foreach (var id in new[] { "pj", "k1", "j2", "kk" })
+        // k2 is out of range too, but it watches south and spots red itself.
+        foreach (var id in new[] { "vj", "t1" })
         {
-            Assert.Null(sim.ReceivedFrom(id, "vj"));
-            Assert.False(sim.Simulation.KnowsOf(id, "red"), $"{id} is more than {SpecSpotting.VoiceRangeMeters} m from vj and should not know of red");
+            Assert.Null(sim.ReceivedFrom(id, "j2"));
+            Assert.False(sim.Simulation.KnowsOf(id, "red"), $"{id} is more than {SpecSpotting.VoiceRangeMeters} m from j2 and should not know of red");
         }
     }
 
     [Fact]
-    public void SP8_the_leader_hearing_the_report_needs_no_relay_and_no_one_reports_the_enemy_twice()
+    public void SP8_the_leader_hearing_the_report_needs_no_relay_and_those_who_heard_it_do_not_report_it()
     {
         var sim = SpottingLayouts.FlankAtRest();
 
         sim.RedStandsUp().RunFor(TimeSpan.FromMinutes(2));
 
-        var report = Assert.Single(sim.ReportsOf("red"));
-        Assert.Equal("vj", report.AgentId);
+        // j2 reports once; nobody who heard it reports or repeats it. (k2, out of range, spots red and reports it itself.)
+        var reports = sim.ReportsOf("red");
+        Assert.Single(reports, r => r.AgentId == "j2");
+        Assert.DoesNotContain(reports, r => r.AgentId is "rj" or "j1" or "pj" or "kk" or "k1");
     }
 
     [Fact]
@@ -108,7 +111,7 @@ public class SpotReportTests
         sim.RunUntil(s => s.TimeSeconds >= reportedAt + SpecShooting.Rules.PostureChangeSeconds + s.Simulation.Config.TickSeconds - 1e-9,
             OneMinute, "a posture change later");
 
-        foreach (var id in new[] { "j1", "k2", "t1" })
+        foreach (var id in new[] { "j1", "pj", "kk", "k1" })
         {
             sim.Unit(id).Should().BeIn(Posture.Crouching).HaveGroundSpeed(0);
         }
@@ -131,7 +134,7 @@ public class SpotReportTests
     [Fact]
     public void SP9_a_leader_out_of_voice_range_does_not_hear_the_spotters_report()
     {
-        var sim = SpottingLayouts.RearInFile();
+        var sim = SpottingLayouts.BesideTheFileTail();
 
         sim.RedStandsUp().RunUntil(s => s.ReportsOf("red").Count > 0, OneMinute, "a report of red");
 
@@ -144,8 +147,8 @@ public class SpotReportTests
     public void SP9_the_report_is_passed_on_toward_the_leader_by_the_hearer_nearest_to_it()
     {
         // t1 (x 340) is heard by kk (352) and vj (364); vj, the nearer to rj (400), repeats it 2 s later and is heard by
-        // j2 (376) and j1 (388); j1 repeats it 2 s after that, and rj hears it.
-        var sim = SpottingLayouts.RearInFile();
+        // j2 (376) and j1 (388); j1 repeats it 2 s after that, and rj hears it (SpottingLayouts.BesideTheFileTail).
+        var sim = SpottingLayouts.BesideTheFileTail();
         sim.RedStandsUp().RunUntilKnows("rj", "red", OneMinute);
 
         var reports = sim.ReportsOf("red");

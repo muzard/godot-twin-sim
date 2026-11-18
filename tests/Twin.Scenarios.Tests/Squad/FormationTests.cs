@@ -27,7 +27,7 @@ public class FormationTests
     private static readonly Vec2 Start = new(80, 101);
     private static readonly Vec2 B = new(420, 101);
 
-    private static Corridor Straight(double width = 60) =>
+    private static Corridor Straight(double width = 80) =>
         new([Start, B], width, SpecV01.SoftMargin, SpecV01.SoftPenalty, HardBoundaries: []);
 
     private static ScenarioRun Squad(SquadFormation formation, Func<TestMap, TestMap>? terrain = null)
@@ -159,14 +159,15 @@ public class FormationTests
     [Fact]
     public void FO4_a_wedge_wider_than_the_corridor_is_compressed_evenly_to_fit()
     {
-        // Inner zone 20 m wide: the wedge's 4 steps out (28.3 m) scale to 10 m, so each step out becomes 2.5 m.
+        // Inner zone 20 m wide: the wedge reaches 5 steps out to the right of rj (k2, 35.4 m; rj walks the left arm), which
+        // scale to 10 m, so each step out becomes 2.0 m.
         const double width = 20;
         var sim = Squad(SquadFormation.Wedge);
         sim.Order("rj", new MoveThroughCorridor(Straight(width)))
             .RunUntil(s => s.Unit("rj").Position.X > 200, TenMinutes, "rj past x = 200");
 
         var leader = sim.Unit("rj").Position.Xy;
-        var scale = (width / 2) / (4 * S);
+        var scale = (width / 2) / (5 * S);
         foreach (var id in Members)
         {
             var nominal = Nominal(SquadFormation.Wedge, id);
@@ -181,7 +182,7 @@ public class FormationTests
     [Fact]
     public void FO4_a_corridor_too_narrow_for_the_wedge_gives_a_file()
     {
-        // Inner zone 6 m wide: scaling to 3 m would leave 0.75 m between neighbours across, under the 1 m minimum.
+        // Inner zone 6 m wide: scaling to 3 m would leave 0.6 m between neighbours across, under the 1 m minimum.
         const double width = 6;
         var sim = Squad(SquadFormation.Wedge);
         sim.Order("rj", new MoveThroughCorridor(Straight(width)))
@@ -198,17 +199,18 @@ public class FormationTests
     [Fact]
     public void FO5_a_slot_inside_a_building_moves_toward_the_leaders_path_to_the_nearest_usable_point()
     {
-        // At B the wedge's t1 slot would be (405.9, 72.7), inside a building that fills x 395–415, y 60–80.
-        var sim = Squad(SquadFormation.Wedge, m => m.Fill(TerrainClass.Building, 395, 60, 415, 80));
+        // At B the wedge's k2 slot (the right tail) would be (398.8, 65.6), inside a building that fills x 393–405,
+        // y 58–72; k1's slot (405.9, 72.7) is just outside it.
+        var sim = Squad(SquadFormation.Wedge, m => m.Fill(TerrainClass.Building, 393, 58, 405, 72));
 
         sim.Order("rj", new MoveThroughCorridor(Straight(width: 80))).RunUntilSquadSettled("r1", TenMinutes);
 
-        var nominal = SquadMovementAssertions.OnStraightRoute(B, East, Nominal(SquadFormation.Wedge, "t1"));
-        var slot = Slot(sim, "t1");
+        var nominal = SquadMovementAssertions.OnStraightRoute(B, East, Nominal(SquadFormation.Wedge, "k2"));
+        var slot = Slot(sim, "k2");
         Assert.Equal(nominal.X, slot.X, precision: 6);                      // on the line toward the path
-        Assert.InRange(slot.Y, 80, 80 + SpecV01.CellSize);                  // just north of the building
+        Assert.InRange(slot.Y, 72, 72 + SpecV01.CellSize);                  // just north of the building
         Assert.NotEqual(TerrainClass.Building, ((IWorldQuery)sim.Terrain).ClassAt(slot.X, slot.Y));
-        sim.ShouldBeInSlot("t1", toleranceMeters: 1);
-        sim.Unit("t1").Should().BeIdle();
+        sim.ShouldBeInSlot("k2", toleranceMeters: 1);
+        sim.Unit("k2").Should().BeIdle();
     }
 }

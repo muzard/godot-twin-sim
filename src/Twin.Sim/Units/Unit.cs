@@ -130,8 +130,9 @@ public sealed class Unit
 
     /// <summary>
     /// Where the unit watches (backlog 0004 S5a1), unit length: toward the nearest attacker in the drill under fire,
-    /// toward the last known position of an enemy it has just learned of, its formation place's sector while it follows a
-    /// squad, otherwise its direction of movement or the direction of its last <see cref="Watch"/> order. North at first.
+    /// toward the last known position of an enemy it has just learned of while it stands still, the direction of its last
+    /// <see cref="Watch"/> order, the centre of its first S2c observation sector while it follows a squad, otherwise its
+    /// direction of movement. North at first.
     /// </summary>
     public Vec2 WatchDirection { get; internal set; } = new(0, 1);
 
@@ -153,6 +154,24 @@ public sealed class Unit
 
     /// <summary>What the unit is currently doing.</summary>
     public UnitActivity Activity { get; internal set; } = UnitActivity.Idle;
+
+    /// <summary>
+    /// The way the unit faces, a unit vector in map coordinates (backlog 0004, S2c). It starts facing north. A squad member
+    /// following its squad faces the centre of its first observation sector; any other unit faces the way it last moved.
+    /// </summary>
+    public Vec2 Heading { get; internal set; } = new(0, 1);
+
+    /// <summary>
+    /// The directions the unit observes (backlog 0004, S2c): set for members of a moving or deployed squad, empty for
+    /// anyone else. Data only for now: seeing does not depend on them until the observation model arrives.
+    /// </summary>
+    public IReadOnlyList<ObservationSector> ObservationSectors { get; internal set; } = [];
+
+    /// <summary>True if the unit also watches the air (backlog 0004, S2c; data only, as the sectors).</summary>
+    public bool WatchesAir { get; internal set; }
+
+    /// <summary>True if one of <see cref="ObservationSectors"/> covers the map direction <paramref name="direction"/>.</summary>
+    public bool Observes(Vec2 direction) => ObservationSectors.Any(s => s.Covers(direction));
 
     /// <summary>Progress through a corridor order, owned by the corridor movement system.</summary>
     internal Systems.CorridorProgress? CorridorProgress { get; set; }
@@ -197,6 +216,12 @@ public sealed class Unit
 
     /// <summary>The last known position of the enemy the unit learned of last; it watches there until it moves on.</summary>
     internal Vec2? WatchTarget { get; set; }
+
+    /// <summary>
+    /// True while the unit watches its S2c observation sectors (a squad member following its squad): it spots by the best
+    /// of their centres, not by <see cref="WatchDirection"/> alone.
+    /// </summary>
+    internal bool WatchesSectors { get; set; }
 
     /// <summary>True from a <see cref="Watch"/> order until the next order: the unit keeps that direction.</summary>
     internal bool HoldsWatch { get; set; }
