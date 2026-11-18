@@ -45,6 +45,12 @@ public sealed class Squad
     /// </summary>
     public EnemyEstimate EnemyEstimate { get; internal set; } = EnemyEstimate.None;
 
+    /// <summary>The squad's front as its leader last distributed fire over it (backlog 0004 S5b); null when there is none.</summary>
+    public FireArea? Front { get; internal set; }
+
+    /// <summary>When the leader distributes fire on its own, having learned of a new enemy (S5b); null if not due.</summary>
+    internal double? FireCommandDue { get; set; }
+
     /// <summary>The formation the squad's leader has commanded last (members change to it as the command reaches them).</summary>
     public SquadFormation Formation { get; internal set; }
 

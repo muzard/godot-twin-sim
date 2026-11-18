@@ -9,7 +9,7 @@ namespace Twin.Sim.Systems;
 
 /// <summary>
 /// Watching and spotting (backlog 0004 S5a1). First every agent's watch direction is set: toward its nearest attacker in
-/// the drill under fire; while it stands still, toward the last known position of the enemy it learned of last (moving
+/// the drill under fire; the centre of the fire area its squad leader gave it (S5b); while it stands still, toward the last known position of the enemy it learned of last (moving
 /// on ends that); the direction of its last <see cref="Orders.Watch"/> order until its next order; while it follows a
 /// squad, its S2c observation sectors (<see cref="Unit.ObservationSectors"/>, backlog 0004 decision 20): it watches the
 /// centre of each, the first one being its <see cref="Unit.WatchDirection"/>; otherwise its direction of movement, or
@@ -141,6 +141,11 @@ public sealed class SpottingSystem : ISimSystem
                 .FirstOrDefault() is { } attacker)
         {
             return attacker.Position.Xy - here;
+        }
+
+        if (unit.FireArea is { } area && !unit.HoldsWatch)
+        {
+            return area.Centre; // it watches the fire area its leader gave it (backlog 0004 S5b)
         }
 
         var moving = unit.Velocity.Xy.Length > 1e-9;
@@ -324,6 +329,12 @@ internal static class SquadAlerts
         if (squad.LeaderId == unit.Id)
         {
             Halt(simulation, squad, unit, enemyId);
+            // The leader distributes fire its reaction time after it learns of a new enemy (backlog 0004 S5b); a leader holding
+            // fire does not (its squad may not fire, and fire areas would turn its members' watch).
+            if (unit.Combatant!.Rules != RulesOfEngagement.HoldFire)
+            {
+                squad.FireCommandDue ??= simulation.TimeSeconds + simulation.Config.SquadDoctrine.ReactionSeconds(unit.Combatant.Experience);
+            }
         }
     }
 
@@ -374,6 +385,7 @@ internal static class SquadAlerts
     /// </summary>
     public static void Resume(Simulation simulation, Squad squad, Unit leader, Order? newOrder = null)
     {
+        EndFireDistribution(simulation, squad); // moving on drops the fire areas (backlog 0004 S5b)
         if (!squad.IsHalted)
         {
             return;
@@ -419,6 +431,22 @@ internal static class SquadAlerts
             }
 
             unit.PostureBeforeAlert = null;
+        }
+    }
+
+    /// <summary>
+    /// The squad moves on (backlog 0004 S5b): its fire distribution ends at once, without a cease fire: members drop their
+    /// fire areas and watch their observation sectors again, and in contact fire at the first enemy they spot.
+    /// </summary>
+    private static void EndFireDistribution(Simulation simulation, Squad squad)
+    {
+        squad.Front = null;
+        squad.FireCommandDue = null;
+        foreach (var member in squad.Members)
+        {
+            var unit = simulation.GetUnit(member.UnitId);
+            unit.FireArea = null;
+            unit.CeasedFire = false;
         }
     }
 

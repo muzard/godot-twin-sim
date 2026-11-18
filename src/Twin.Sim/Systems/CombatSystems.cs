@@ -88,7 +88,10 @@ public sealed class CombatStatusSystem : ISimSystem
 /// Firing (backlogs 0002 and 0003). Each combatant that can shoot picks a target: the target of its <see cref="FireAt"/>
 /// order; in the drill under fire, the nearest visible attacker (snap shots first, then aimed); otherwise, under its
 /// rules of engagement, the nearest visible agent that shot at it, or (free fire) the nearest visible enemy. Only an enemy
-/// the shooter has spotted itself is a target (backlog 0004 S5a1; while spotting is on, an ordered target too). It never
+/// the shooter has spotted itself is a target (backlog 0004 S5a1; while spotting is on, an ordered target too). A squad
+/// member under return fire in contact fires as under free fire; one with a fire area from its leader fires only at
+/// enemies in it (a machine gunner also, with snap fire, at known enemies there it has not spotted), and none after a squad
+/// cease fire, its own attackers excepted (backlog 0004 S5b). It never
 /// fires with an own fighter in its fire sector, nor while heavily suppressed, and fire without an order keeps a reserve
 /// of rounds. Every shot is heard within the weapon's sound range, shows a muzzle flash, and adds fire pressure to its
 /// target and to anyone its rounds pass close by; a round passing within the under-fire distance starts the drill of an
@@ -153,13 +156,66 @@ public sealed class FireSystem : ISimSystem
         }
 
         var attacker = Nearest(simulation, shooter, CombatQueries.Attackers(simulation, shooter));
-        if (attacker is not null || combatant.Rules != RulesOfEngagement.FreeFire)
+        if (attacker is not null)
         {
-            return WithMode(simulation, shooter, attacker, FireMode.Aimed);
+            return WithMode(simulation, shooter, attacker, FireMode.Aimed); // the duty to return fire, in any fire area
         }
 
-        return WithMode(simulation, shooter, Nearest(simulation, shooter, simulation.Units), FireMode.Aimed);
+        return FreeTarget(simulation, shooter, combatant);
     }
+
+    /// <summary>
+    /// What a fighter fires at besides its attackers (backlog 0004 S5b): nothing after a squad cease fire; in its fire area,
+    /// the nearest spotted enemy there (a machine gun also a known enemy there it has not spotted, with snap fire); without
+    /// one, under free fire or in contact, the nearest spotted enemy.
+    /// </summary>
+    private static (Unit Target, FireMode Mode)? FreeTarget(Simulation simulation, Unit shooter, Combatant combatant)
+    {
+        if (shooter.CeasedFire)
+        {
+            return null;
+        }
+
+        if (shooter.FireArea is { } area)
+        {
+            var here = shooter.Position.Xy;
+            var spotted = Nearest(simulation, shooter, simulation.Units.Where(u => area.Covers(u.Position.Xy - here)));
+            if (spotted is not null)
+            {
+                return WithMode(simulation, shooter, spotted, FireMode.Aimed);
+            }
+
+            return IsMachineGunner(simulation, shooter)
+                ? simulation.Units
+                    .Where(u => shooter.KnownEnemies.TryGetValue(u.Id, out var known) && area.Covers(known - here) && Suppressible(simulation, shooter, u))
+                    .OrderBy(u => shooter.EyePosition.DistanceTo(u.AimPoint)).ThenBy(u => u.Id, StringComparer.Ordinal)
+                    .Select(u => ((Unit Target, FireMode Mode)?)(u, FireMode.Snap))
+                    .FirstOrDefault()
+                : null;
+        }
+
+        return combatant.Rules == RulesOfEngagement.FreeFire || InContact(simulation, shooter)
+            ? WithMode(simulation, shooter, Nearest(simulation, shooter, simulation.Units), FireMode.Aimed)
+            : null;
+    }
+
+    /// <summary>
+    /// True for a squad member under return fire in contact (backlog 0004 S5b): it knows of an enemy, or its squad is halted
+    /// on one; it then fires at the first enemy it spots. Not with <see cref="ObservationRules.Off"/>.
+    /// </summary>
+    private static bool InContact(Simulation simulation, Unit unit) =>
+        !simulation.Config.Combat.Observation.IsOff && simulation.SquadOf(unit.Id) is { } squad &&
+        (unit.KnownEnemies.Count > 0 || squad.IsHalted);
+
+    private static bool IsMachineGunner(Simulation simulation, Unit unit) =>
+        simulation.SquadOf(unit.Id) is { } squad && squad.Member(unit.Id).Role == Squads.SquadRole.MachineGunner;
+
+    /// <summary>A known enemy the machine gun can put suppressive fire on: in action, in range, in sight, its sector clear.</summary>
+    private static bool Suppressible(Simulation simulation, Unit shooter, Unit target) =>
+        target.Combatant is { } other && other.Side != shooter.Combatant!.Side && target.Health != Health.OutOfAction &&
+        shooter.EyePosition.DistanceTo(target.AimPoint) <= shooter.Combatant.Weapon.MaxRangeMeters &&
+        CombatQueries.SectorClear(simulation, shooter, shooter.Position.Xy, target.Position.Xy) &&
+        CombatQueries.Sees(simulation, shooter, target);
 
     private static (Unit Target, FireMode Mode)? ChooseInDrill(Simulation simulation, Unit shooter, Combatant combatant, ContactDrill drill)
     {
@@ -176,9 +232,8 @@ public sealed class FireSystem : ISimSystem
 
                 return WithMode(simulation, shooter, Nearest(simulation, shooter, attackers), FireMode.Snap);
             case ContactDrillStage.ReturningFire:
-                var target = Nearest(simulation, shooter, attackers) ??
-                    (combatant.Rules == RulesOfEngagement.FreeFire ? Nearest(simulation, shooter, simulation.Units) : null);
-                return WithMode(simulation, shooter, target, FireMode.Aimed);
+                var attacker = Nearest(simulation, shooter, attackers);
+                return attacker is not null ? WithMode(simulation, shooter, attacker, FireMode.Aimed) : FreeTarget(simulation, shooter, combatant);
             default:
                 return null; // moving to cover or to a firing position: no fire on the way
         }

@@ -129,8 +129,9 @@ public sealed class Unit
     public int RoundsLeft { get; internal set; }
 
     /// <summary>
-    /// Where the unit watches (backlog 0004 S5a1), unit length: toward the nearest attacker in the drill under fire,
-    /// toward the last known position of an enemy it has just learned of while it stands still, the direction of its last
+    /// Where the unit watches (backlog 0004 S5a1), unit length: toward the nearest attacker in the drill under fire, the
+    /// centre of the fire area its squad leader gave it (S5b), toward the last known position of an enemy it has just
+    /// learned of while it stands still, the direction of its last
     /// <see cref="Watch"/> order, the centre of its first S2c observation sector while it follows a squad, otherwise its
     /// direction of movement. North at first.
     /// </summary>
@@ -255,6 +256,15 @@ public sealed class Unit
     internal double SpeedFactor => SquadSpeedFactor * (CombatRules is { } rules
         ? rules.For(Posture).SpeedFactor * (Health == Health.Wounded ? rules.WoundedSpeedFactor : 1)
         : 1);
+
+    /// <summary>
+    /// The fire area its squad leader gave it (backlog 0004 S5b): it watches it and fires only at enemies in it (and back at
+    /// its own attacker). Null when it has none.
+    /// </summary>
+    public Squads.FireArea? FireArea { get; internal set; }
+
+    /// <summary>True after a squad cease fire reached the unit, until a new fire distribution (S5b).</summary>
+    internal bool CeasedFire { get; set; }
 
     /// <summary>True once the unit has heard a heavy machine gun, or been told of one in a report (backlog 0004 S5a2).</summary>
     internal bool KnowsHeavyMachineGun { get; set; }

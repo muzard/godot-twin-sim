@@ -2,8 +2,8 @@
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
 (2026-11-17); S2a and S2b specified and implemented (2026-11-18); S2c specified and implemented (2026-11-18); S2d specified and implemented (2026-11-19); S5a1
-(spotting) specified and implemented (2026-11-18); S5a2 specified and implemented (2026-11-19); S5b–S6 have no tests
-yet. Drafted as 0003 in parallel with
+(spotting) specified and implemented (2026-11-18); S5a2 specified and implemented (2026-11-19); S5b specified and implemented (2026-11-19);
+CC and S6 have no tests yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -748,6 +748,82 @@ the scenario's `world` key. SM10 passes before the implementation (it measures w
 S5a is delivered in two parts. **S5a1: spotting** (observation, watch sectors, the spot report, the squad halts),
 below. **S5a2:** the rest of S5a (UF1, UF5–UF7, WS3: contact by fire up the chain, the enemy estimate, suppression
 slows command, the drill conflicts), built on S5a1's reports.
+
+#### S5b spec decisions (2026-11-19; tests reviewed and implemented)
+Decided with the product owner: before the squad leader distributes fire, members fire at the first enemy they see;
+after it, into the fire area (tulialue) the leader commands. A fire area is a direction sector from each fighter, and
+sectors can and should overlap. The leader decides on its own and commands through the chain of command; a member
+watches its area and fires once it spots an enemy there; fire ends when the target is out of action or on a command.
+⚠ **The sector split below is a first version and must be reworked properly later** (product owner, 2026-11-19).
+- **Before the fire command (in contact).** A member that knows of an enemy (spotted or reported), or whose squad is
+  halted on contact, fires at the first enemy it spots, as under free fire, unless it holds fire. (Return fire is raised
+  to free fire in contact; a member under hold fire still holds fire.)
+- **The leader distributes fire on its own.** When the leader learns of an enemy it did not know of, it commands the
+  fire distribution after its reaction time (`DirectSquadFire`, a squad command: `CommandIssued`, delivered with S1's
+  delays and S5a2's suppression factors). A later new enemy brings a new command. The same order can be given to the
+  leader from outside; `SquadCeaseFire` to the leader ends the distribution.
+- **The front.** The squad's fire area as the leader sees it: the bearings from the leader to the enemies it knows of,
+  widened by `10°` **[PROPOSAL]** on each side (at least `20°` wide).
+- **Sectors (first version).** The front is split into equal shares, one per team, left to right in the open line's
+  team order (second-in-command's team, leader's team, other teams). Each share is widened by half its width (a quarter
+  on each side), so neighbouring sectors overlap. A fighter's sector is its team's share as a direction sector from the
+  fighter's own position. The machine gunner's sector is the whole front.
+- **In its sector** a member watches the sector's centre and fires at the enemies it has spotted there, nearest first; it
+  does not fire outside it, except back at its own attacker (0003's duty to return fire). An enemy known but not yet
+  spotted is not fired at (direction fire is a later ticket) — **except by the machine gun:** it fires suppressive bursts
+  at the known positions of enemies in its sector even if it has not spotted them, as snap fire (0003's snap hit model);
+  its misses suppress as any rounds do.
+- **Fire ends** at a target out of action (the member moves on to the next enemy in its sector, or stops and keeps
+  watching), or on `SquadCeaseFire`: then members fire only back at their own attackers until a new distribution.
+  0003's reserve applies to all fire without a `FireAt` order.
+
+#### API the S5b tests need from `Twin.Sim`
+- Orders `DirectSquadFire` and `SquadCeaseFire` (squad commands to the leader; logged as `CommandIssued` whose text
+  starts with the order's name).
+- `FireArea(Centre, WidthDegrees)` (`Twin.Sim.Squads`; a direction sector, `Covers(direction)`); `Squad.Front` (null
+  before any distribution); `Unit.FireArea` (null when the member has none).
+- `SquadDoctrine.FrontMarginDegrees` (10) and `SquadDoctrine.TeamShareWidening` (0.5).
+
+#### S5b tests (`FireControlTests`)
+| Test | Checks |
+|---|---|
+| before the command a member in contact fires at the first enemy it spots | a member fires at a red it spotted, before the fire command reaches it, though nobody fired at it |
+| a squad holding fire does not fire in contact | no shots |
+| the leader distributes fire its reaction time after it learns of an enemy | `DirectSquadFire` 1 s after rj learns of red |
+| a new enemy brings a new fire command | a second red appears: a second command 1 s after rj learns of it |
+| the front spans the known enemies widened by the margin | centred between the two reds, 2 × 21.8° + 2 × 10° wide |
+| each team gets an overlapping share left to right | support left, command middle, point right; each a third of the front widened by half |
+| the machine gunner gets the whole front | kk's fire area = the front |
+| a member watches the centre of its fire area | watch direction = fire area centre |
+| after the distribution a member fires only at enemies in its sector | point team only at red-right, support riflemen only at red-left, command team not at all |
+| the machine gun fires suppressive bursts at a known enemy it has not spotted | kk (blind) fires snap bursts at red-left; t1 (blind) does not fire |
+| a member whose sector holds no enemy in action stops firing | after red-right is out of action the point team fires no more |
+| a squad cease fire ends the distribution and the fire | no more shots; no fire area |
+| a fire distribution can be ordered from outside | `DirectSquadFire` to rj issues a new command |
+
+Choices made while implementing: a leader that holds fire does not distribute fire on its own (its squad may not fire,
+and fire areas would turn its members' watch; S5a1's spotting tests caught it); a member with a fire area watches it
+before a just-learned enemy's position; a member's own attacker comes first, in or out of its fire area; the front's
+centre is the mean of the bearings, so it never wraps round. Known limitations: fire areas are fixed when the command
+reaches a member and do not follow it when the squad moves; the sector split is a first version (see above). Evidence
+for the rework (st1 ambush, review 2026-11-19): with three red fighters within about 3° of each other as rj sees them,
+the front is about 23° wide and each widened share about 12°; seen from the support team's own positions its share
+misses the enemy (t1 spotted all three within 245 m but never fired), so only the middle team engages; blue lost
+3 of 9 and red none, where before S5b it was 2 and 2. The machine gun fires only at known enemies it can see (not yet
+spotted); suppressing one out of sight is direction fire, a later ticket. Known enemies out of action still widen the
+front. A leader holding fire still distributes when ordered from outside; `DirectSquadFire` with no known enemy does
+nothing.
+
+Decided with the product owner in review (2026-11-19) and tested in `FireDistributionLifetimeTests`: a successor that
+knows of enemies distributes fire its reaction time after it takes command (a distribution due when the leader falls
+waits for it), and the squad moving on (`ResumeMovement`, or a new movement order to the leader) drops the fire areas at
+once, without a cease fire, so members watch their observation sectors again. Also found in review and tested in
+`FireControlEdgeCaseTests`: a member fires back at its own attacker outside its fire area and after a cease fire, and a
+cease fire calls off a distribution already due. The machine gun picks known enemies by their known position.
+
+The squad stands in a row facing north with weapons that never hit (except where a test says otherwise); two red
+fighters hold fire 100 m north, one in the support team's share only and one in the point team's. Kit:
+`Scenario.WithSquad(..., weapons)`, `SpecSquad.FrontMarginDegrees`, `TeamShareWidening`, `DirectSquadFireCommand`.
 
 #### S5a2 spec decisions (2026-11-19; tests reviewed and implemented)
 Decided with the product owner: contact by fire travels like a spot report; suppression slows commands 1.5 × / 3 ×; the

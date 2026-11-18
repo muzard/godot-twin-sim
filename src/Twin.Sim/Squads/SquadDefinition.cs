@@ -87,6 +87,10 @@ public enum SquadFormation
 /// <param name="SuppressedDelayFactor">A suppressed member reacts, relays and takes over this many times slower (S5a2).</param>
 /// <param name="HeavilySuppressedDelayFactor">A heavily suppressed member reacts, relays and takes over this many times
 /// slower (S5a2).</param>
+/// <param name="FrontMarginDegrees">The squad's front reaches this far beyond the bearings to the outermost enemies the
+/// leader knows of, on each side (S5b). Provisional.</param>
+/// <param name="TeamShareWidening">Each team's share of the front is widened by this fraction of its width, so
+/// neighbouring sectors overlap (S5b). A first version, to be reworked.</param>
 public sealed record SquadDoctrine(
     double ExperiencedReactionSeconds = 1,
     double InexperiencedReactionSeconds = 3,
@@ -103,7 +107,9 @@ public sealed record SquadDoctrine(
     double SecondLineDepthMeters = 10,
     double SectorWidthDegrees = 90,
     double SuppressedDelayFactor = 1.5,
-    double HeavilySuppressedDelayFactor = 3)
+    double HeavilySuppressedDelayFactor = 3,
+    double FrontMarginDegrees = 10,
+    double TeamShareWidening = 0.5)
 {
     /// <summary>
     /// The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s; 10 m interval, 1 m minimum gap, leader
