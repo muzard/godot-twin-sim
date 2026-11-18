@@ -12,7 +12,8 @@ namespace Twin.Sim.Movement;
 /// limit, or if it crosses a hard boundary that no permit covers. A diagonal arc also needs both cells beside it to be
 /// passable (no corner cutting). An arc may not cross a cliff line unless the profile can rappel; a rappelled arc
 /// ignores the slope limit and costs as much as the steepest walkable slope (docs/adr/0010). Ties are broken by cell index, so the same input always gives the same path.
-/// The search covers the corridor's bounding rectangle, or the whole world without a corridor.
+/// The search covers the corridor's bounding rectangle, or the whole world without a corridor, clipped to the options'
+/// window if one is given.
 /// </summary>
 public static class Pathfinder
 {
@@ -166,6 +167,14 @@ public static class Pathfinder
                 r0 = Math.Max(r0, (int)Math.Floor((minY - bounds.MinY) / _cell));
                 c1 = Math.Min(c1, (int)Math.Floor((maxX - bounds.MinX) / _cell));
                 r1 = Math.Min(r1, (int)Math.Floor((maxY - bounds.MinY) / _cell));
+            }
+
+            if (options.Window is { } window)
+            {
+                c0 = Math.Max(c0, (int)Math.Floor((window.Min.X - bounds.MinX) / _cell));
+                r0 = Math.Max(r0, (int)Math.Floor((window.Min.Y - bounds.MinY) / _cell));
+                c1 = Math.Min(c1, (int)Math.Floor((window.Max.X - bounds.MinX) / _cell));
+                r1 = Math.Min(r1, (int)Math.Floor((window.Max.Y - bounds.MinY) / _cell));
             }
 
             _col0 = c0;

@@ -1,25 +1,32 @@
+using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
 
 namespace Twin.Sim.Squads;
 
 /// <summary>
-/// A squad in the simulation (backlog 0004): its members and who leads it and each of its teams now. Formed with
-/// <see cref="Simulation.AddSquad"/>; <see cref="Systems.SquadSystem"/> carries commands through it and fills a leader's
-/// place when the leader is out of action.
+/// A squad in the simulation (backlog 0004): its members, who leads it and each of its teams now, and how it moves.
+/// Formed with <see cref="Simulation.AddSquad"/>; <see cref="Systems.SquadSystem"/> carries commands through it and fills a
+/// leader's place when the leader is out of action; <see cref="Systems.SquadCohesionSystem"/> and
+/// <see cref="Systems.SquadFollowSystem"/> move it behind its leader.
 /// </summary>
 public sealed class Squad
 {
     private readonly SortedDictionary<string, SquadMember> _members = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, SquadFormation> _memberFormations = new(StringComparer.Ordinal);
+    private readonly SortedSet<string> _detached = new(StringComparer.Ordinal);
     private readonly string?[] _teamLeaders;
 
     internal Squad(SquadDefinition definition, string leaderId, IReadOnlyList<string> teamLeaderIds)
     {
+        Definition = definition with { Teams = [.. definition.Teams], Members = [.. definition.Members] };
         Id = definition.Id;
-        Teams = [.. definition.Teams];
-        Members = [.. definition.Members];
+        Teams = Definition.Teams;
+        Members = Definition.Members;
+        Formation = definition.Formation;
         foreach (var member in Members)
         {
             _members.Add(member.UnitId, member);
+            _memberFormations.Add(member.UnitId, definition.Formation);
         }
 
         LeaderId = leaderId;
@@ -27,13 +34,51 @@ public sealed class Squad
         TeamTakeovers = new Takeover?[Teams.Count];
     }
 
+    /// <summary>The formation the squad's leader has commanded last (members change to it as the command reaches them).</summary>
+    public SquadFormation Formation { get; internal set; }
+
+    /// <summary>The definition the squad was formed from.</summary>
+    internal SquadDefinition Definition { get; }
+
+    /// <summary>True once the leader has had a movement order: from then on the members follow it in their slots.</summary>
+    internal bool MovementStarted { get; set; }
+
+    /// <summary>True while the leader waits for its squad (hysteresis between the straggler and regroup distances).</summary>
+    internal bool LeaderHeld { get; set; }
+
+    /// <summary>The path the leader has walked since the squad started moving, oldest first.</summary>
+    internal List<Vec2> LeaderTrail { get; } = [];
+
+    /// <summary>The leader the trail belongs to; a new leader starts a new trail.</summary>
+    internal string? TrailLeaderId { get; set; }
+
+    /// <summary>The corridor of the leader's current or last corridor order; null after a plain move order.</summary>
+    internal Corridors.Corridor? Corridor { get; set; }
+
+    /// <summary>The formation <paramref name="unitId"/> moves in: the last formation command it has acted on.</summary>
+    /// <exception cref="KeyNotFoundException">The agent is not in this squad.</exception>
+    public SquadFormation FormationOf(string unitId) =>
+        _memberFormations.TryGetValue(unitId, out var formation) ? formation : throw new KeyNotFoundException($"'{unitId}' is not in squad '{Id}'.");
+
+    /// <summary>
+    /// True if <paramref name="unitId"/> is a member that follows the squad's movement; false for a member detached by any
+    /// order given straight to it (until it is ordered to rejoin) and for an agent outside the squad.
+    /// </summary>
+    public bool IsFollowing(string unitId) => _members.ContainsKey(unitId) && !_detached.Contains(unitId);
+
+    internal void SetMemberFormation(string unitId, SquadFormation formation) => _memberFormations[unitId] = formation;
+
+    internal void Detach(string unitId) => _detached.Add(unitId);
+
+    internal void Rejoin(string unitId) => _detached.Remove(unitId);
+
     /// <summary>The squad's id.</summary>
     public string Id { get; }
 
     /// <summary>The agent leading the squad now, or null while its place is empty (until a successor takes over).</summary>
     public string? LeaderId { get; internal set; }
 
-    /// <summary>The team names, in formation order.</summary>
+    /// <summary>The team names.</summary>
     public IReadOnlyList<string> Teams { get; }
 
     /// <summary>The members, in squad order.</summary>

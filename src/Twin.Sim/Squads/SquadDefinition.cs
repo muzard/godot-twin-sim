@@ -37,10 +37,22 @@ public sealed record SquadMember(string UnitId, SquadRole Role, string Team);
 /// side, each in one squad only.
 /// </summary>
 /// <param name="Id">The squad's id, unique in the simulation.</param>
-/// <param name="Teams">The team names, in formation order.</param>
+/// <param name="Teams">The team names. (The formation order of teams follows the roles: see <see cref="FormationSlots"/>.)</param>
 /// <param name="Members">The members, in squad order: a team's next member in this order takes it over when its leader is
 /// out of action.</param>
-public sealed record SquadDefinition(string Id, IReadOnlyList<string> Teams, IReadOnlyList<SquadMember> Members);
+/// <param name="Formation">The formation the squad starts in.</param>
+public sealed record SquadDefinition(
+    string Id, IReadOnlyList<string> Teams, IReadOnlyList<SquadMember> Members, SquadFormation Formation = SquadFormation.File);
+
+/// <summary>How a squad moves: the shape its members' slots make around the leader (backlog 0004, S2a).</summary>
+public enum SquadFormation
+{
+    /// <summary>Jono: everyone on the leader's path, one interval apart.</summary>
+    File,
+
+    /// <summary>Kiila: one squad wedge with the first member at its apex and the leader on its axis.</summary>
+    Wedge,
+}
 
 /// <summary>
 /// How commands travel in a squad: the doctrine's delays (backlog 0004). An experienced member acts on the leader's
@@ -58,13 +70,30 @@ public sealed record SquadDefinition(string Id, IReadOnlyList<string> Teams, IRe
 /// <param name="InexperiencedReactionSeconds">t_react of an inexperienced member.</param>
 /// <param name="RelaySeconds">t_relay: a team leader passes a command on this long after acting on it.</param>
 /// <param name="TakeoverSeconds">t_takeover.</param>
+/// <param name="IntervalMeters">Distance between neighbours in file and wedge (S2a). Provisional: it should depend on the
+/// terrain.</param>
+/// <param name="MinimumGapMeters">A formation compressed to fit a corridor keeps at least this lateral gap between
+/// neighbouring slots, or becomes a file.</param>
+/// <param name="LeaderSpeedFactor">The squad leader moves at this fraction of its speed, so members can keep up.</param>
+/// <param name="StragglerMeters">The leader halts while a member is farther than this from its slot.</param>
+/// <param name="RegroupMeters">The leader moves on when every member is within this of its slot.</param>
+/// <param name="LocalSearchMeters">Side of the square window around a member in which it searches a way to its slot.</param>
 public sealed record SquadDoctrine(
     double ExperiencedReactionSeconds = 1,
     double InexperiencedReactionSeconds = 3,
     double RelaySeconds = 2,
-    double TakeoverSeconds = 5)
+    double TakeoverSeconds = 5,
+    double IntervalMeters = 10,
+    double MinimumGapMeters = 1,
+    double LeaderSpeedFactor = 0.8,
+    double StragglerMeters = 20,
+    double RegroupMeters = 5,
+    double LocalSearchMeters = 64)
 {
-    /// <summary>The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s.</summary>
+    /// <summary>
+    /// The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s; 10 m interval, 1 m minimum gap, leader
+    /// at 0.8 ×, halt beyond 20 m, move on within 5 m, 64 m search window.
+    /// </summary>
     public static SquadDoctrine Default { get; } = new();
 
     /// <summary>

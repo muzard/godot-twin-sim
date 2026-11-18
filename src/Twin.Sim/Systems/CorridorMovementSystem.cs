@@ -19,6 +19,7 @@ namespace Twin.Sim.Systems;
 /// a timeout it takes the respecting route if there is one, and otherwise stops and reports that it is blocked.</item>
 /// <item>Follow the route at the local speed, v · dt per step, ending exactly on the destination.</item>
 /// </list>
+/// A squad leader waiting for its squad keeps its planned route but does not move (backlog 0004).
 /// </summary>
 public sealed class CorridorMovementSystem : ISimSystem
 {
@@ -64,7 +65,13 @@ public sealed class CorridorMovementSystem : ISimSystem
                 CheckForAnswer(simulation, world, unit, profile, progress);
             }
 
-            if (progress.State == CorridorState.Moving)
+            if (progress.State == CorridorState.Moving && unit.HeldBySquad)
+            {
+                // A squad leader waits for its squad with its route planned (backlog 0004).
+                unit.Velocity = Vec3.Zero;
+                CombatQueries.SetActivity(unit, UnitActivity.WaitingForSquad);
+            }
+            else if (progress.State == CorridorState.Moving)
             {
                 Advance(simulation, world, unit, profile, progress, dtSeconds);
             }

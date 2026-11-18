@@ -6,7 +6,8 @@ namespace Twin.Sim.Systems;
 
 /// <summary>
 /// Moves units that have a <see cref="MoveTo"/> order in a straight line at their maximum ground speed times their
-/// posture and wound factor, keeping them on the ground. Pinned, suppressed or posture-changing units do not move.
+/// posture and wound factor, keeping them on the ground. Pinned, suppressed or posture-changing units do not move, nor
+/// does a squad leader waiting for its squad (backlog 0004).
 /// Slope effects, terrain cost and pathfinding are in <see cref="CorridorMovementSystem"/>.
 /// </summary>
 public sealed class MovementSystem : ISimSystem
@@ -19,6 +20,13 @@ public sealed class MovementSystem : ISimSystem
         {
             if (unit.CurrentOrder is not MoveTo move || unit.IsImmobilized)
             {
+                continue;
+            }
+
+            if (unit.HeldBySquad)
+            {
+                unit.Velocity = Vec3.Zero;
+                CombatQueries.SetActivity(unit, UnitActivity.WaitingForSquad);
                 continue;
             }
 

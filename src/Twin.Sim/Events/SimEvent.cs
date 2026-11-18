@@ -1,6 +1,7 @@
 using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Geometry;
+using Twin.Sim.Squads;
 using Twin.Sim.Units;
 
 namespace Twin.Sim.Events;
@@ -151,9 +152,18 @@ public sealed record ContactReported(double Time, string AgentId, string Attacke
 /// <param name="SquadId">The squad.</param>
 /// <param name="Teams">Its team names, in formation order.</param>
 /// <param name="TeamLeaderIds">Each team's leader, in team order.</param>
+/// <param name="Formation">The formation it starts in (S2a).</param>
 public sealed record SquadFormed(
-    double Time, string AgentId, string SquadId, IReadOnlyList<string> Teams, IReadOnlyList<string> TeamLeaderIds)
+    double Time, string AgentId, string SquadId, IReadOnlyList<string> Teams, IReadOnlyList<string> TeamLeaderIds,
+    SquadFormation Formation = SquadFormation.File)
     : SimEvent(Time, AgentId);
+
+/// <summary>A squad's leader commanded a formation (backlog 0004, S2a); members take it as the command reaches them.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="Formation">The new formation.</param>
+public sealed record FormationChanged(double Time, string AgentId, string SquadId, SquadFormation Formation) : SimEvent(Time, AgentId);
 
 /// <summary>A squad's leader commanded its squad (backlog 0004). Members act on it later, each logging <see cref="CommandReceived"/>.</summary>
 /// <param name="Time">Simulated time.</param>
@@ -189,7 +199,9 @@ public sealed record TeamLeaderChanged(double Time, string AgentId, string Squad
 /// <param name="Id">The squad.</param>
 /// <param name="LeaderId">Its leader, or null while the place is empty.</param>
 /// <param name="TeamLeaderIds">Each team's leader in team order, null while the place is empty.</param>
-public sealed record SquadSnapshot(string Id, string? LeaderId, IReadOnlyList<string?> TeamLeaderIds);
+/// <param name="Formation">The formation its leader commanded last.</param>
+public sealed record SquadSnapshot(
+    string Id, string? LeaderId, IReadOnlyList<string?> TeamLeaderIds, SquadFormation Formation = SquadFormation.File);
 
 /// <summary>One agent in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The agent.</param>

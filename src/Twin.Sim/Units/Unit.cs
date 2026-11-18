@@ -36,6 +36,12 @@ public enum UnitActivity
     /// Reserved for casualty care: treating or carrying a wounded team-mate. Nothing sets it yet (backlog 0002).
     /// </summary>
     GivingAid,
+
+    /// <summary>
+    /// A squad leader holding its movement order until its squad is with it: a member is far from its slot, pinned or
+    /// out of action (backlog 0004, S2a).
+    /// </summary>
+    WaitingForSquad,
 }
 
 /// <summary>
@@ -177,10 +183,19 @@ public sealed class Unit
     internal bool IsImmobilized =>
         Health is Health.Pinned or Health.OutOfAction || IsSuppressed || PostureChangeUntil is not null;
 
-    /// <summary>Multiplier on walking speed from posture and wounds.</summary>
-    internal double SpeedFactor => CombatRules is { } rules
+    /// <summary>
+    /// True while the unit leads a squad that is not with it: its movement order is kept but it does not move
+    /// (backlog 0004). Set by <see cref="Systems.SquadCohesionSystem"/>.
+    /// </summary>
+    internal bool HeldBySquad { get; set; }
+
+    /// <summary>Multiplier on walking speed for a squad leader, so its members can keep up (1 for everyone else).</summary>
+    internal double SquadSpeedFactor { get; set; } = 1;
+
+    /// <summary>Multiplier on walking speed from posture, wounds and leading a squad.</summary>
+    internal double SpeedFactor => SquadSpeedFactor * (CombatRules is { } rules
         ? rules.For(Posture).SpeedFactor * (Health == Health.Wounded ? rules.WoundedSpeedFactor : 1)
-        : 1;
+        : 1);
 
     /// <summary>Convenience: true when <see cref="Activity"/> is <see cref="UnitActivity.Idle"/>.</summary>
     public bool IsIdle => Activity == UnitActivity.Idle;

@@ -4,6 +4,7 @@ using System.Text.Json;
 using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Geometry;
+using Twin.Sim.Squads;
 using Twin.Sim.Units;
 
 namespace Twin.Sim.Events;
@@ -139,6 +140,11 @@ public static class EventLog
                 w.WriteString("squad", formed.SquadId);
                 WriteStrings(w, "teams", formed.Teams);
                 WriteStrings(w, "teamLeaders", formed.TeamLeaderIds);
+                w.WriteString("formation", formed.Formation.ToString());
+                break;
+            case FormationChanged formation:
+                w.WriteString("squad", formation.SquadId);
+                w.WriteString("formation", formation.Formation.ToString());
                 break;
             case CommandIssued issued:
                 w.WriteString("squad", issued.SquadId);
@@ -200,7 +206,9 @@ public static class EventLog
             nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.TryGetProperty("heavy", out var heavy) && heavy.GetBoolean()),
             nameof(SuppressionEnded) => new SuppressionEnded(time, agent),
             nameof(PostureChanged) => new PostureChanged(time, agent, Enum.Parse<Posture>(Text(j, "posture"))),
-            nameof(SquadFormed) => new SquadFormed(time, agent, Text(j, "squad"), Strings(j, "teams"), Strings(j, "teamLeaders")),
+            nameof(SquadFormed) => new SquadFormed(time, agent, Text(j, "squad"), Strings(j, "teams"), Strings(j, "teamLeaders"),
+                j.TryGetProperty("formation", out var formed) ? Enum.Parse<SquadFormation>(formed.GetString() ?? string.Empty) : SquadFormation.File),
+            nameof(FormationChanged) => new FormationChanged(time, agent, Text(j, "squad"), Enum.Parse<SquadFormation>(Text(j, "formation"))),
             nameof(CommandIssued) => new CommandIssued(time, agent, Text(j, "squad"), j.GetProperty("commandId").GetInt32(), Text(j, "command")),
             nameof(CommandReceived) => new CommandReceived(time, agent, j.GetProperty("commandId").GetInt32()),
             nameof(LeaderChanged) => new LeaderChanged(time, agent, Text(j, "squad")),
@@ -329,8 +337,11 @@ public static class EventReplay
         switch (e)
         {
             case SquadFormed formed:
-                squads[formed.SquadId] = new SquadSnapshot(formed.SquadId, formed.AgentId, [.. formed.TeamLeaderIds]);
+                squads[formed.SquadId] = new SquadSnapshot(formed.SquadId, formed.AgentId, [.. formed.TeamLeaderIds], formed.Formation);
                 teams[formed.SquadId] = [.. formed.Teams];
+                break;
+            case FormationChanged formation when squads.TryGetValue(formation.SquadId, out var squad):
+                squads[squad.Id] = squad with { Formation = formation.Formation };
                 break;
             case LeaderChanged leader when squads.TryGetValue(leader.SquadId, out var squad):
                 squads[squad.Id] = squad with { LeaderId = leader.AgentId };

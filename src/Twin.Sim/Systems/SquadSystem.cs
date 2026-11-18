@@ -45,7 +45,13 @@ public sealed class SquadSystem : ISimSystem
         var doctrine = simulation.Config.SquadDoctrine;
         var commandId = simulation.NextCommandId();
         simulation.Log(new CommandIssued(now, leader.Id, squad.Id, commandId, command.ToString()));
-        CarryOut(leader, command);
+        if (command is SetSquadFormation formation)
+        {
+            squad.Formation = formation.Formation;
+            simulation.Log(new FormationChanged(now, leader.Id, squad.Id, formation.Formation));
+        }
+
+        CarryOut(squad, leader, command);
 
         foreach (var member in squad.Members)
         {
@@ -95,7 +101,7 @@ public sealed class SquadSystem : ISimSystem
 
             var unit = simulation.GetUnit(delivery.UnitId);
             simulation.Log(new CommandReceived(now, unit.Id, delivery.CommandId));
-            CarryOut(unit, delivery.Command);
+            CarryOut(squad, unit, delivery.Command);
             foreach (var recipient in delivery.RelayTo)
             {
                 // Counted from when the team leader was due to act, so ticks never add up to extra delay.
@@ -106,14 +112,22 @@ public sealed class SquadSystem : ISimSystem
     }
 
     /// <summary>
-    /// The unit acts on a command. A member's posture change starts on the next step (this system runs after
-    /// <see cref="CombatStatusSystem"/>); the leader's, carried out when its order takes effect, starts on the same step.
+    /// The unit acts on a command: takes the posture, or moves to its slot in the new formation. A member's posture change
+    /// starts on the next step (this system runs after <see cref="CombatStatusSystem"/>); the leader's, carried out when its
+    /// order takes effect, starts on the same step.
     /// </summary>
-    private static void CarryOut(Unit unit, Order command)
+    private static void CarryOut(Squad squad, Unit unit, Order command)
     {
-        if (command is SetSquadPosture posture)
+        switch (command)
         {
-            CombatQueries.WantPosture(unit, posture.Posture);
+            case SetSquadPosture posture:
+                CombatQueries.WantPosture(unit, posture.Posture);
+                break;
+            case SetSquadFormation formation:
+                squad.SetMemberFormation(unit.Id, formation.Formation);
+                break;
+            default:
+                break;
         }
     }
 
