@@ -1,7 +1,8 @@
 # 0004. Squad: leadership, formations and drills under fire (Smoke test II)
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
-(2026-11-17); S2a specified and implemented (2026-11-18); S2b–S6 have no tests yet. Drafted as 0003 in parallel with
+(2026-11-17); S2a and S2b specified and implemented (2026-11-18); S2c specified and implemented (2026-11-18); S2d–S6
+have no tests yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -30,8 +31,9 @@ otherwise. Decided with the product owner on 2026-11-18:
 |---|---|---|
 | **S1** | Squad, roles, chain of command, succession | SQ1–SQ6, done (PR #11) |
 | **S2a** | Squad movement: only the RJ is ordered; file and wedge slots along the RJ's route; members move straight or by local A*; cohesion (leader at 0.8 ×, waits for stragglers); arrival in slots; `SetSquadFormation` through the chain of command; a member ordered directly leaves the squad's movement until `Rejoin` | SM1, SM2, SM8, SM9, FO1–FO3 for file and wedge |
-| **S2b** | Hard boundaries: the RJ asks, the squad halts, a permit covers the formation, a member at the boundary waits; forest-edge deployment in an open line | SM3–SM7 |
-| **S2c** | scenario.json `squad` section (and the enemies an ambush needs); a squad crossing st1, timed; the Godot replay marks the squad and its leader | SM10 |
+| **S2b** | Hard boundaries: the RJ asks, the squad halts in formation, a permit covers the formation; slots across a boundary to the side tuck in (a double file); a member whose way forward crosses one asks the RJ; the RJ briefs its movement order to the squad, and a successor carries it on or asks the platoon leader to repeat it | SM3–SM5, SM7, SU1–SU4 |
+| **S2c** | Forest-edge deployment: the squad deploys in an open line 5 m inside the edge before the RJ asks to leave the forest; members' headings and observation sectors (data only) | SM6, observation (decision 20) |
+| **S2d** | scenario.json `squad` section (and the enemies an ambush needs); a squad crossing st1, timed; the Godot replay marks the squad and its leader | SM10 |
 | **S5a** | Contact reaches the RJ up the chain (relay delays, slowed by suppression); the RJ's enemy estimate (distinct enemies, heavy machine gun by the sound of a heard shot); the squad's movement is suspended under contact, not lost; suppression slows commands and takeover; squad commands and 0003's drill no longer conflict (the two S1 limitations) | UF1, UF5–UF7, WS3 |
 | **S5b** | The RJ directs fire: commands members or teams to fire at reported enemies (fire control) | new criteria |
 | **CC** | Casualty care (0002's foundation): tell the dead from the badly wounded; the dead are left, the wounded are carried or helped by squad mates (`GivingAid`), which slows the squad and takes fighters out of the fight; the RJ reports casualties to the platoon leader | new criteria; replaces S2a's provisional "out of action halts the squad" |
@@ -142,10 +144,11 @@ the `squad` section of scenario.json.
   wedge, for example) stops at the boundary and waits for the squad, without crossing.
 - **Deploying at the forest edge.** When the RJ must ask for permission to leave the forest, the squad first deploys
   along the edge, then the RJ asks:
-  - the squad takes an open line along the edge, centred on the RJ's requested crossing point, every member in a
-    forest cell `5 m` **[PROPOSAL]** inside the edge, at the open line's interval, compressed to fit the corridor;
-  - members face out of the forest (observing; there is no observation model yet, so this is position and heading
-    only);
+  - the squad takes an open line along the edge, centred on the RJ, every member in a forest cell `5 m`
+    **[PROPOSAL]** inside the edge, at the open line's interval; members that do not fit the corridor form a second line
+    `10 m` deeper (see "S2c spec decisions");
+  - members face out of the forest and observe it (headings and observation sectors, data only until the observation
+    model arrives);
   - the RJ asks when all able members are in place (`EdgeDeployed`), or after `60 s` **[PROPOSAL]** at the latest;
   - after a grant the squad crosses in the ordered formation; after a denial it re-forms and takes the respecting
     route, or reports blocked.
@@ -170,7 +173,9 @@ command delay. Formations are data: a table of `(along, across)` slots in units 
 Team order in every formation: the point team in front, the command team with the RJ in the middle, the support team
 at the rear. In a file they follow in that order; in a line the point team is on one flank and the support team on the
 other; in a wedge the point team is at the tip and the command and support teams are in the arms. Inside a team the
-members keep the order of the squad data, team leader first.
+members keep the order of the squad data, team leader first. *(Superseded for the open line and the wedge by decision
+20: support team left with its machine gunner next to the RJ, the command team, the point team right; the wedge is
+that line folded back at its middle. S3 revisits the other formations.)*
 
 ### Combat model additions: machine gun and suppression strength (S4)
 These change the 0002 combat model and are a part of their own, with no squad in the tests. Every 0002 test must
@@ -409,16 +414,18 @@ place each fighter with it), `Scenario.ForSquad`, `WithSquad`,
   squad order. Reference squad: pj, k1, k2, rj, j1, j2, vj, kk, t1.
 - **File (jono):** everyone on the RJ's path, 10 m apart, in formation order; the point team ahead of the RJ on its
   route, the rest behind it on the path it walked.
-- **Wedge (kiila):** one squad wedge. The first member (pj) at the apex; the others alternate left and right arm in
-  formation order, 10 m apart along each arm at 45° (7.07 m back and 7.07 m out per step). The RJ walks the route
-  itself, on the wedge's axis at the depth of its place, so its own arm slot stays empty:
+- **Wedge (kiila):** *(redefined in S2c, decision 20; the original S2a wedge had pj at the apex and the others
+  alternating left and right in formation order.)* One squad wedge: the open line (see "S2c spec decisions") folded
+  back at its middle member, 10 m apart along each arm at 45° (7.07 m back and 7.07 m out per step). The RJ walks the
+  route itself, on the left arm one step behind and left of the apex, so the wedge reaches 21.2 m to its left and
+  35.4 m to its right:
 
   ```
-          pj
-        k1  k2
-      ·  rj  j1
-    j2          vj
-  kk              t1
+            j1
+         rj    j2
+      kk          pj
+   vj                k1
+  t1                    k2
   ```
 - **Slots follow the route.** A slot is `(along, across)` relative to the RJ, measured along the RJ's path (its planned
   route ahead, the path it walked behind) and across it at that point. Beyond the ends the path is extended straight.
@@ -452,17 +459,15 @@ place each fighter with it), `Scenario.ForSquad`, `WithSquad`,
 
 #### Known limitations of S2a (inputs to the next parts)
 None of these is reached by an S2a scenario; each is recorded so its part decides it on purpose.
-- **A new leader does not take over the movement order.** When the RJ falls mid-move, the VJ takes command (S1) with
-  no movement order of its own; the members hold their ground until it gets one (tested). The ticket's design passes the
-  squad's order and permits to the successor: S2b, with permits.
+- ~~**A new leader does not take over the movement order.**~~ *Resolved in S2b:* a successor that heard the RJ's brief
+  carries the order on (the members re-form round it); one that did not asks the platoon leader to repeat it. The S2a
+  edge test was updated accordingly.
 - **The leader in 0003's drill:** while the leader is in the drill the members do not follow (they hold, or do their
   own drill if they are under fire); its rush to cover is not recorded as the squad's path. A following member's own
   drill searches cover without a corridor, since it has no order of its own. S5a.
-- **A leader waiting for permission** (S2b): the route ahead is then a straight line to the destination, so the
-  formation turns toward it while the squad halts.
-- **Straight moves ignore hard boundaries and the forest edge;** a member's local path search respects them. S2b makes
-  this consistent.
-- **Performance on st1** is not measured yet (SM10, S2c). Slots are computed a few times per step; the trail keeps a
+- ~~**A leader waiting for permission**~~ *Resolved in S2b:* the formation keeps facing the way it came.
+- ~~**Straight moves ignore hard boundaries and the forest edge.**~~ *Resolved in S2b.*
+- **Performance on st1** is not measured yet (SM10, S2d). Slots are computed a few times per step; the trail keeps a
   point every 0.5 m and only as far back as the deepest slot needs; the route ahead is cut where no slot reaches; a
   blocked member searches its 64 m window again every step.
 
@@ -505,6 +510,150 @@ movement values (`IntervalMeters`, `MinimumGapMeters`, `LeaderSpeedFactor`, `Str
 `LocalSearchMeters`, `WedgeStepMeters`) in `SpecSquad.Doctrine`, `SquadSpec.Formation`, `UnitAssertions.HaveActivity`,
 and `SquadMovementAssertions` (`SquadSettled`, `RunUntilSquadSettled`, `ShouldBeInSlot`, `ShouldAllBeInSlots`,
 `OnStraightRoute`).
+
+#### S2b spec decisions (2026-11-18)
+Decided with the product owner; S2b was split from the forest-edge deployment (now S2c) to keep the part small.
+- **The RJ asks as in v0.1** when its plan needs a permit (a drawn line or the forest edge); the **squad halts in
+  formation** around it, facing the direction it last walked (the route ahead is ignored while the RJ waits, so the
+  formation does not swing toward the destination). A drawn line never triggers a deployment (SM7).
+- **A permit covers the formation:** it is the squad's, valid for every member within `permit radius + the formation's
+  half-width` of the requested point (the half-width after any compression, when the request is made).
+- **No member crosses an unpermitted hard boundary,** drawn or the forest edge, on a straight move or a path search.
+- **Tucking in (SM5, sideways):** a slot that lies across an unpermitted boundary from its point on the RJ's path moves
+  toward that point to the nearest point on the path's side. Several such members end up side by side along the
+  boundary, so the formation becomes a double file (parijono) there.
+- **Asking the RJ (SM5, forward):** a member whose way forward to its slot crosses an unpermitted boundary stops just
+  before it (`WaitingForPermission`) and asks the RJ (`PermissionRequested` by the member). After the relay time (2 s)
+  the RJ asks the platoon leader (the scripted leader; `PermissionRequested` by the RJ, same boundary and point) unless a
+  squad permit already covers it. The squad halts while it waits. A grant is a squad permit as above; after a denial or a
+  timeout no one in the squad asks to cross that boundary again under this order: a member goes round it if its path
+  search finds a way, and otherwise stays on its side while the squad waits for it (nobody is left behind). *(Changed
+  in review, 2026-11-18: the earlier text said its slot tucks in, which left it stuck for good when the boundary lies
+  ahead of it rather than to the side.)*
+- **A permit lasts one order:** the squad's permits, refusals and any pending request lapse when its leader gets a new
+  order from the platoon leader; a successor carrying the old order on keeps them.
+- **The order brief (SU1):** when the RJ gets a movement order it tells it to the squad at once, through the chain of
+  command (`CommandIssued` with the order; each member knows it when it acts on it, S1 delays). The members follow the
+  RJ's movement meanwhile whether they have heard it or not.
+- **Succession (SU2–SU4):** a successor that has heard the brief carries on with the squad's movement order and its
+  permits. One that has not asks the platoon leader (`OrderRequested`); the scripted leader repeats it after its delay
+  (`OrderRepeated`, any answer but `NoAnswer`), and the successor then carries on and briefs the squad. Until then the
+  squad holds its ground. (With S2a's provisional rule an out-of-action member still halts the squad, so in S2b "carries
+  on" is seen as the successor holding the order and waiting for the squad.)
+
+#### API the S2b tests need from `Twin.Sim`
+- `Squad.Permits`: the squad's permits, each with the radius widened by the formation's half-width.
+- `Squad.KnowsOrder(unitId)`: true once the member has acted on the RJ's brief of the current movement order (the RJ
+  knows its own order).
+- events `OrderRequested(Time, AgentId = successor, SquadId)` and `OrderRepeated(Time, AgentId = successor, SquadId)`;
+  `PermissionRequested` by a member for its request to the RJ.
+
+#### S2b tests
+| ID | Test | Checks |
+|---|---|---|
+| SM3 | the squad halts in formation while the RJ waits for permission | RJ `WaitingForPermission`; every member idle in its slot, laid out along the walked path |
+| SM3 | no member crosses an unpermitted boundary | `RouteAudit` on every member's trail against the squad's permits |
+| SM4 | after a grant the squad crosses in formation and arrives | every crossing within `radius + half-width` of the requested point |
+| SM4 | after a denial the squad takes the respecting route, or halts as one when there is none | no crossing; RJ `Blocked`, members idle |
+| SM5 | slots across a boundary to the side tuck in to a double file | tucked slots on the path's side, within 1 m of the boundary |
+| SM5 | a member whose way forward crosses a boundary asks the RJ, which asks the platoon leader after the relay time | event order and times; the squad halts; after the grant it crosses |
+| SM7 | a drawn boundary halts the squad where the RJ asks; it does not move up to the line first | members and RJ still where they were |
+| SU1 | the RJ briefs its movement order through the chain of command | `CommandIssued` with the order; `KnowsOrder` after S1 delays |
+| SU2 | a successor that heard the brief carries on with the order and the permits | new leader holds the corridor order |
+| SU3 | a successor that did not hear it asks the platoon leader, who repeats it after the leader's delay | `OrderRequested`, `OrderRepeated`; then the order |
+| SU4 | a platoon leader that never answers leaves the squad holding its ground | no order, members still |
+| — | edge cases found in review (`SquadPermitEdgeCaseTests`) | a permit does not carry over to the next order; no member leaves the forest without a permit; after a denial a member goes round and the squad arrives; a successor carries the squad's permits |
+
+Also changed with approval: S2a's edge test now checks that the members re-form round a successor that carries the
+order on, and SU2 waits for vj's suppression from the nearby fire to end before it checks that vj waits for the squad.
+Known limitations of S2b: a member's request is not withdrawn if its slot moves and it no longer needs to cross (the
+squad waits for the answer); the Godot replay matches permission answers to requests by agent, so a member's request
+stays marked unanswered there (S2d).
+
+#### S2c spec decisions (2026-11-18)
+Decided with the product owner.
+- **Only a squad deploys.** A lone agent asks to leave the forest as in v0.1, where it stands when it plans.
+- **When:** the RJ's plan needs a permit and the first unpermitted crossing is the forest edge (a drawn line first is
+  S2b: the squad halts in formation, SM7). The RJ does not ask where it stands: it walks on along its reference route,
+  with the squad in formation behind it, to the last point before the crossing that lies `5 m` **[PROPOSAL]** inside
+  the edge (inside = distance to the nearest cell outside the forest that counts as leaving it, ADR 0009). If it is
+  already closer to the edge, it deploys where it is.
+- **The deployment is a squad command:** there the RJ commands it (`CommandIssued` with `DeployAtForestEdge`); each
+  member moves to its spot in the line when the command reaches it (S1 delays).
+- **The open line (avorivi), teams side by side:** left to right facing out of the forest, the second-in-command's team
+  (its riflemen outermost, then the second-in-command, then the machine gunner next to the RJ), the RJ and its team in
+  squad order, then the other teams in team order, each in squad order. One interval (10 m) apart, the RJ at its point.
+  Reference squad: t1, vj, kk, **rj**, j1, j2, pj, k1, k2 (three to the RJ's left, five to its right). *The general rule
+  (machine gunner next to the RJ, riflemen outermost) is our reading of the product owner's order for the reference
+  squad.* The wedge is this line folded back at its middle member (decision 20), so the line is the wedge with its
+  tails brought level. The line runs along the edge (perpendicular to the direction from the RJ to the nearest point
+  of the edge), and each spot is moved along that direction to the forest cell `5 m` inside the edge. The order is the
+  same whatever formation the squad arrives in.
+- **A second line (provisional):** a spot outside the corridor's outer limit, outside the forest, or impassable is not
+  used. The members left over form a second line `10 m` **[PROPOSAL]** deeper (15 m inside the edge), in the same
+  order, one interval apart, centred on the RJ's axis (k1 and k2 in the 14 m test corridor); a third line if needed,
+  and so on. *Compressing the line is the
+  alternative and may replace this.*
+- **Asking:** the RJ asks (`PermissionRequested` for the forest edge, as v0.1) in the same step as the squad has
+  deployed: every able (not out of action) member that follows the squad stands in its spot (`EdgeDeployed`, by the RJ).
+  At the latest it asks `60 s` **[PROPOSAL]** after its command, without `EdgeDeployed`.
+- **The permit covers the line:** radius plus the line's half-width (the farthest first-line spot from the RJ), as S2b's
+  half-width at the time of the request.
+- **After a grant** the squad crosses and re-forms in its ordered formation in the open; **after a denial** it takes the
+  respecting route or reports blocked as in S2b, without leaving the forest.
+
+**Headings and observation (S2c, data only).** The observation model is in development, so S2c gives every member a
+heading and observation sectors, and seeing does not depend on them yet. Values are **[PROPOSAL]**:
+- every sector is `90°` wide (±45° about its centre); a member faces the centre of its first sector;
+- on the move (directions relative to the RJ's path at the member's slot): the point observes ahead and the others
+  their own side. In a file the point is the first, and the others alternate by their place in the file, odd places
+  left and even places right; in a wedge the point is the apex and each arm observes its own side. The two at the back
+  (the last two of a file, the ends of a wedge's arms) also observe the rear and the air;
+- deployed at the forest edge: everyone observes out of the forest; the two ends of the first line also observe their
+  flank along the edge, the rear and the air;
+- together the squad observes all round (360°) on the move and at the edge;
+- an agent outside a squad faces the way it moves and keeps its heading when it stops; it has no sectors.
+
+#### API the S2c tests need from `Twin.Sim`
+- `SquadDoctrine`: `EdgeInsetMeters` (5), `EdgeDeploymentSeconds` (60), `SecondLineDepthMeters` (10),
+  `SectorWidthDegrees` (90).
+- event `EdgeDeployed(Time, AgentId = RJ, SquadId)`; the deployment command logged as `CommandIssued` whose `Command`
+  starts with `DeployAtForestEdge`.
+- `FormationSlots.LineOrder(SquadDefinition)`: the open line's members, left to right.
+- `Unit.Heading` (a unit vector in map coordinates), `Unit.ObservationSectors` (`ObservationSector(Centre, WidthDegrees)`,
+  centre a unit vector), `Unit.WatchesAir`, and `Unit.Observes(direction)`: true when a sector covers the direction,
+  edges included.
+
+#### S2c tests
+| ID | Test | Checks |
+|---|---|---|
+| SM6 | the squad deploys in an open line 5 m inside the forest edge | every member 5 ± 1 m inside, in line order 10 m apart, in the forest, in its slot |
+| SM6 | the RJ asks to leave the forest only once the squad has deployed | `EdgeDeployed`, then `PermissionRequested` for the forest edge in the same step; the command came first; RJ 5 m inside |
+| SM6 | members take their line spots when the deployment command reaches them | S1 delays for k2 (1 s) and k1 (8 s) |
+| SM6 | the RJ asks at the deployment time limit when the line has not formed | a 3 s limit: request 3 s after the command, no `EdgeDeployed` |
+| SM6 | after a grant the squad leaves the forest within the permit and arrives in formation | permit radius 10 + 50 (k2, five intervals right); `RouteAudit` on every trail; slots at B |
+| SM6 | after a denial with no way round the squad stays in the forest and halts as one | RJ `Blocked`; nobody past the edge; all still |
+| SM6 | members that do not fit the corridor form a second line 10 m deeper | 14 m corridor: k1 and k2 15 m inside, ±5 m about the RJ's axis |
+| SM6 | the line follows a slanted forest edge | 30° edge: every member 5 ± 1.5 m inside, 10 m apart along the edge |
+| SM6 | a deployment survives a round trip through the log and repeats byte for byte | `EdgeDeployed` in the log |
+| — | observation (`SquadObservationTests`) | file: pj ahead, odd places left, even right, kk and t1 rear and air; wedge: j1 ahead, each arm its side, t1 and k2 rear and air; all round; facing the first sector; at the edge all face out, the ends (t1, k2) watch flanks, rear and air, all round; a lone agent faces the way it moves |
+| FO1 | the open line and the wedge redefined (`FormationSlotsTests`, pure) | `FormationSlots.LineOrder`; the wedge is the line folded at j1, neighbours 10 m apart |
+
+Changed in the S2c spec with the redefined wedge: S2a's wedge tests (FO1 layout, FO4 scale now from k2's 5 steps,
+FO5 with k2's slot in a building, the cliff and bog comments), S2b's (SM4 permit radius `10 + 5 steps` and k2's
+crossing, SM5 tucks j2, pj, k1 and k2, and j1 the apex asks first), and the default corridor of the S2a movement and
+formation tests widened from 60 to 80 m (S2b's wedge tests too) so the wider wedge fits without compression.
+
+Known limitations of S2c: headings and sectors are not in the event log or the replay yet (S2d); sectors do not affect
+seeing until the observation model; the line's second-line rule is provisional (compression may replace it).
+Choices made while implementing: while the RJ walks up to the edge and while the squad is deployed, a member that reaches
+the forest edge waits there without asking (the RJ asks for the squad); the edge's direction is fitted through the edge
+cells within 15 m of the crossing; a member stands in its spot when within 0.5 m of it; after a denial with no way round
+the squad stays in its line; a member waiting at the edge for the RJ does not hold the squad back; a member that rejoined
+after the line was laid out has no spot and is not waited for. Edge cases found in review are tested in
+`SquadEdgeDeploymentEdgeCaseTests` (a squad in file, a squad that starts in the open, a clearing on the way and a second
+edge, a leader already closer than 5 m) and `HeadingEdgeCaseTests` (a lone agent faces any way it moves, keeps its
+heading when it stops).
 
 ### S3: formations
 - FO1 On flat open ground each formation's members are within `1 m` **[PROPOSAL]** of their slots after settling.
@@ -570,15 +719,24 @@ and `SquadMovementAssertions` (`SquadSettled`, `RunUntilSquadSettled`, `ShouldBe
 ## Decisions (product owner, 2026-11-18)
 15. **Immediate action needs no leader:** under fire every member does 0003's drill on its own; the RJ then directs
     fire and manoeuvres the squad. No `TakeCoverAndReturnFire` command.
-16. **Delivery:** the ambush slice (S2a–S2c, S5a–S5b, casualty care (CC, added by decision 18), S6a–S6b, then the
+16. **Delivery:** the ambush slice (S2a–S2d, S5a–S5b, casualty care (CC, added by decision 18), S6a–S6b, then the
     ambush acceptance test); file and wedge in S2, the other formations in S3 after the slice; S2, S5 and S6 in full.
 17. **S2a:** 10 m interval in file and wedge, provisional (spacing must become terrain-dependent); compression
-    allowed with lateral gaps of at least 1 m for now; one squad wedge with the point team leader at the apex; a member
+    allowed with lateral gaps of at least 1 m for now; one squad wedge with the point team leader at the apex (changed by
+    decision 20); a member
     ordered directly (by any order) is detached until `Rejoin`; compression and unusable slots (FO4, FO5) in S2a.
 18. **Nobody is left behind:** a squad does not move on normally under fire; a pinned member halts the squad, at least
     its team stays with it. Breaking contact is an option, and the squad's return fire should then free the pinned
     fighter to move (S6b). The dead are left; the wounded are carried or helped, and casualties are reported to the
     platoon leader. Casualty care must be implemented (part CC).
+19. **S2b (2026-11-18):** a slot across a boundary to the side tucks in (a double file if several do); a member whose way
+    forward crosses a boundary asks the RJ, which asks the platoon leader; the RJ briefs its movement order to the squad,
+    and a successor that did not hear it asks the platoon leader to repeat it. Forest-edge deployment moved to S2c.
+20. **S2c (2026-11-18):** the open line keeps the teams side by side, left to right t1, vj, kk, rj, j1, j2, pj, k1, k2,
+    with the RJ at its point; the wedge is the same order folded back at the middle (replacing S2a's wedge); members that do not fit form
+    a second line (provisional: compression is also possible and may replace it); only a squad deploys, a lone agent
+    asks as in v0.1. Members get a heading and 360° observation: the point observes ahead, the sides their own side, the
+    last ones also the rear and the air; sectors are data until the observation model (in development) arrives.
 
 ## Decisions (product owner, 2026-11-17)
 1. **Hard boundary:** the RJ asks; its permit covers the whole formation's width and the squad crosses in formation.

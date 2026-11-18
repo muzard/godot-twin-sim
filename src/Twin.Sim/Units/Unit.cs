@@ -147,6 +147,24 @@ public sealed class Unit
     /// <summary>What the unit is currently doing.</summary>
     public UnitActivity Activity { get; internal set; } = UnitActivity.Idle;
 
+    /// <summary>
+    /// The way the unit faces, a unit vector in map coordinates (backlog 0004, S2c). It starts facing north. A squad member
+    /// following its squad faces the centre of its first observation sector; any other unit faces the way it last moved.
+    /// </summary>
+    public Vec2 Heading { get; internal set; } = new(0, 1);
+
+    /// <summary>
+    /// The directions the unit observes (backlog 0004, S2c): set for members of a moving or deployed squad, empty for
+    /// anyone else. Data only for now: seeing does not depend on them until the observation model arrives.
+    /// </summary>
+    public IReadOnlyList<ObservationSector> ObservationSectors { get; internal set; } = [];
+
+    /// <summary>True if the unit also watches the air (backlog 0004, S2c; data only, as the sectors).</summary>
+    public bool WatchesAir { get; internal set; }
+
+    /// <summary>True if one of <see cref="ObservationSectors"/> covers the map direction <paramref name="direction"/>.</summary>
+    public bool Observes(Vec2 direction) => ObservationSectors.Any(s => s.Covers(direction));
+
     /// <summary>Progress through a corridor order, owned by the corridor movement system.</summary>
     internal Systems.CorridorProgress? CorridorProgress { get; set; }
 

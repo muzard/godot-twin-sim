@@ -62,6 +62,27 @@ public sealed class TestMap
         return this;
     }
 
+    /// <summary>
+    /// Sets every cell whose center satisfies <paramref name="where"/> to <paramref name="terrain"/>: for shapes that are not
+    /// rectangles, such as a forest edge at a slant (the edge then follows the cells, a staircase of 2 m steps).
+    /// </summary>
+    public TestMap FillWhere(TerrainClass terrain, Func<Vec2, bool> where)
+    {
+        ArgumentNullException.ThrowIfNull(where);
+        for (var row = 0; row < _rows; row++)
+        {
+            for (var column = 0; column < _columns; column++)
+            {
+                if (where(CellCenter(column, row)))
+                {
+                    _classes[(row * _columns) + column] = terrain;
+                }
+            }
+        }
+
+        return this;
+    }
+
     /// <summary>Sets the ground height of every cell from its center position. Heights are stored as float32.</summary>
     public TestMap WithHeights(Func<Vec2, double> heightAtCellCenter)
     {

@@ -78,6 +78,12 @@ public enum SquadFormation
 /// <param name="StragglerMeters">The leader halts while a member is farther than this from its slot.</param>
 /// <param name="RegroupMeters">The leader moves on when every member is within this of its slot.</param>
 /// <param name="LocalSearchMeters">Side of the square window around a member in which it searches a way to its slot.</param>
+/// <param name="EdgeInsetMeters">At the forest edge (S2c) the open line stands this far inside the edge. Provisional.</param>
+/// <param name="EdgeDeploymentSeconds">The squad leader asks to leave the forest at the latest this long after commanding
+/// the deployment at the edge (S2c). Provisional.</param>
+/// <param name="SecondLineDepthMeters">Members that do not fit the open line at the edge form a further line this much
+/// deeper in the forest (S2c). Provisional: compressing the line may replace it.</param>
+/// <param name="SectorWidthDegrees">Width of every observation sector (S2c). Provisional.</param>
 public sealed record SquadDoctrine(
     double ExperiencedReactionSeconds = 1,
     double InexperiencedReactionSeconds = 3,
@@ -88,11 +94,16 @@ public sealed record SquadDoctrine(
     double LeaderSpeedFactor = 0.8,
     double StragglerMeters = 20,
     double RegroupMeters = 5,
-    double LocalSearchMeters = 64)
+    double LocalSearchMeters = 64,
+    double EdgeInsetMeters = 5,
+    double EdgeDeploymentSeconds = 60,
+    double SecondLineDepthMeters = 10,
+    double SectorWidthDegrees = 90)
 {
     /// <summary>
     /// The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s; 10 m interval, 1 m minimum gap, leader
-    /// at 0.8 ×, halt beyond 20 m, move on within 5 m, 64 m search window.
+    /// at 0.8 ×, halt beyond 20 m, move on within 5 m, 64 m search window; at the forest edge 5 m inside, 60 s limit,
+    /// second line 10 m deeper; 90° observation sectors.
     /// </summary>
     public static SquadDoctrine Default { get; } = new();
 

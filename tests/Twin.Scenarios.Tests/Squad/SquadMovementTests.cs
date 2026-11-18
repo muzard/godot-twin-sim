@@ -24,11 +24,11 @@ public class SquadMovementTests
 
     // Open flat ground, 500 × 200 m. The squad stands in a row on the corridor's centerline (y = 101, a row of cell
     // centers), the leader rj at its west end (x = 80), the others 3 m apart eastward. The corridor runs east to
-    // B = (420, 101); 60 m wide, so even the wedge (28.3 m to each side) fits without compression.
+    // B = (420, 101); 80 m wide, so even the wedge (21.2 m left and 35.4 m right of rj) fits without compression.
     private static readonly Vec2 Start = new(80, 101);
     private static readonly Vec2 B = new(420, 101);
 
-    private static Corridor Straight(double width = 60) =>
+    private static Corridor Straight(double width = 80) =>
         new([Start, B], width, SpecV01.SoftMargin, SpecV01.SoftPenalty, HardBoundaries: []);
 
     private static ScenarioRun SquadOnOpenGround(
@@ -160,8 +160,8 @@ public class SquadMovementTests
     [Fact]
     public void SM2_no_member_crosses_a_cliff_on_its_way()
     {
-        // A cliff line slants across the right arm's tracks (j1, vj and t1 walk 7–28 m right of the route): they must go
-        // round its north end, which stops 13 m short of the route.
+        // A cliff line slants across the right arm's tracks (j2, pj, k1 and k2 walk 14–35 m right of the route): they must
+        // go round its north end, which stops 13 m short of the route.
         IReadOnlyList<Vec2> cliff = [new(200, 88), new(215, 60)];
         var sim = SquadOnOpenGround(SquadFormation.Wedge, world: w => w.WithCliffs([cliff]));
 

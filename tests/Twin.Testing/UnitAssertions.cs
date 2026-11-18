@@ -116,6 +116,37 @@ public sealed class UnitAssertions
     public UnitAssertions HaveActivity(UnitActivity expected) =>
         Check(_unit.Activity == expected, $"to have activity {expected}");
 
+    /// <summary>
+    /// One of the unit's observation sectors (backlog 0004, S2c) covers the map direction <paramref name="direction"/>
+    /// (edges included).
+    /// </summary>
+    public UnitAssertions Observe(Vec2 direction) =>
+        Check(_unit.Observes(direction), $"to observe direction {direction}, but its sectors are {Sectors(_unit)}");
+
+    /// <summary>None of the unit's observation sectors covers the map direction <paramref name="direction"/>.</summary>
+    public UnitAssertions NotObserve(Vec2 direction) =>
+        Check(!_unit.Observes(direction), $"not to observe direction {direction}, but its sectors are {Sectors(_unit)}");
+
+    /// <summary>The unit also watches the air (backlog 0004, S2c).</summary>
+    public UnitAssertions WatchTheAir() => Check(_unit.WatchesAir, "to watch the air");
+
+    /// <summary>The unit does not watch the air.</summary>
+    public UnitAssertions NotWatchTheAir() => Check(!_unit.WatchesAir, "not to watch the air");
+
+    /// <summary>The unit faces <paramref name="direction"/> (its <see cref="Unit.Heading"/>) within <paramref name="toleranceDegrees"/>.</summary>
+    public UnitAssertions Face(Vec2 direction, double toleranceDegrees = 1)
+    {
+        var cos = Math.Clamp(_unit.Heading.Normalized().Dot(direction.Normalized()), -1, 1);
+        var angle = Math.Acos(cos) * 180 / Math.PI;
+        return Check(angle <= toleranceDegrees,
+            $"to face {direction} (±{toleranceDegrees}°), but it faces {_unit.Heading}, {angle:0.#}° off");
+    }
+
+    private static string Sectors(Unit u) =>
+        u.ObservationSectors.Count == 0
+            ? "none"
+            : string.Join(", ", u.ObservationSectors.Select(s => $"{s.Centre} ±{s.WidthDegrees / 2:0.#}°"));
+
     internal static string DescribeUnit(Unit u) =>
         $"  unit '{u.Id}': position {u.Position}, velocity {u.Velocity}, activity {u.Activity}, " +
         $"health {u.Health}, posture {u.Posture}, pressure {u.SuppressionPressure:0.###}, drill {u.DrillStage}, " +

@@ -19,7 +19,9 @@ namespace Twin.Sim.Systems;
 /// a timeout it takes the respecting route if there is one, and otherwise stops and reports that it is blocked.</item>
 /// <item>Follow the route at the local speed, v · dt per step, ending exactly on the destination.</item>
 /// </list>
-/// A squad leader waiting for its squad keeps its planned route but does not move (backlog 0004).
+/// A squad leader waiting for its squad keeps its planned route but does not move (backlog 0004). A squad leader that must
+/// ask to leave the forest first walks on along its reference route to a point inside the edge, commands its squad to
+/// deploy in an open line there, and asks once the line has formed or the deployment time is up (S2c).
 /// </summary>
 public sealed class CorridorMovementSystem : ISimSystem
 {
@@ -57,6 +59,11 @@ public sealed class CorridorMovementSystem : ISimSystem
             if (unit.CorridorProgress is not { } progress || !ReferenceEquals(progress.Order, order))
             {
                 progress = new CorridorProgress(order);
+                if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+                {
+                    progress.Permits.AddRange(squad.Permits); // a squad leader carries the squad's permits (S2b)
+                }
+
                 unit.CorridorProgress = progress;
                 Plan(simulation, world, unit, profile, progress);
             }
@@ -65,7 +72,12 @@ public sealed class CorridorMovementSystem : ISimSystem
                 CheckForAnswer(simulation, world, unit, profile, progress);
             }
 
-            if (progress.State == CorridorState.Moving && unit.HeldBySquad)
+            if (progress.State == CorridorState.Deploying)
+            {
+                unit.Velocity = Vec3.Zero;
+                CheckDeployment(simulation, unit, progress);
+            }
+            else if (progress.State == CorridorState.Moving && unit.HeldBySquad)
             {
                 // A squad leader waits for its squad with its route planned (backlog 0004).
                 unit.Velocity = Vec3.Zero;
@@ -96,7 +108,14 @@ public sealed class CorridorMovementSystem : ISimSystem
             simulation.Log(new PermissionAnswered(now, unit.Id, boundary, leader.Answer));
             if (leader.Answer == LeaderAnswer.Grant)
             {
+                progress.Deployment = null; // a later forest edge on the way is deployed for afresh
+                progress.EdgeCrossing = null;
                 progress.Permits.Add(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters));
+                if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+                {
+                    // The permit covers the squad's formation (backlog 0004, S2b).
+                    squad.AddPermit(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters + progress.SquadHalfWidth));
+                }
             }
             else
             {
@@ -137,14 +156,18 @@ public sealed class CorridorMovementSystem : ISimSystem
             }
 
             var threshold = simulation.Config.Permission.Threshold;
+            var referenceRoute = FullRoute(from, reference.Waypoints, to);
             if ((!respectingUsable || respecting.CostSeconds > threshold * reference.CostSeconds) &&
-                Pathfinder.FirstUnpermittedCrossing(world, FullRoute(from, reference.Waypoints, to), corridor, progress.Permits) is { } crossing)
+                Pathfinder.FirstUnpermittedCrossing(world, referenceRoute, corridor, progress.Permits) is { } crossing)
             {
-                progress.State = CorridorState.Waiting;
-                progress.Request = crossing;
-                progress.RequestedAt = simulation.TimeSeconds;
-                CombatQueries.SetActivity(unit, UnitActivity.WaitingForPermission);
-                simulation.Log(new PermissionRequested(simulation.TimeSeconds, unit.Id, crossing.BoundaryId, crossing.At));
+                if (crossing.BoundaryId == HardBoundary.ForestEdgeId && progress.Deployment is null &&
+                    simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+                {
+                    ApproachEdge(simulation, world, unit, progress, squad, referenceRoute, crossing, reference.CostSeconds);
+                    return;
+                }
+
+                Request(simulation, unit, progress, crossing);
                 return;
             }
         }
@@ -158,9 +181,99 @@ public sealed class CorridorMovementSystem : ISimSystem
         progress.Route = FullRoute(from, respecting.Waypoints, to);
         progress.Next = 1;
         progress.State = CorridorState.Moving;
+        progress.Deployment = null; // on its way: a squad deployed at the edge re-forms
+        progress.EdgeCrossing = null;
         CombatQueries.SetActivity(unit, UnitActivity.Moving);
         simulation.Log(new PathPlanned(simulation.TimeSeconds, unit.Id, respecting.Waypoints, respecting.CostSeconds));
     }
+
+    /// <summary>Asks the leader for permission to cross and waits in place.</summary>
+    private static void Request(Simulation simulation, Unit unit, CorridorProgress progress, BoundaryCrossing crossing)
+    {
+        progress.State = CorridorState.Waiting;
+        progress.Request = crossing;
+        progress.RequestedAt = simulation.TimeSeconds;
+        if (simulation.SquadOf(unit.Id) is { } led && led.LeaderId == unit.Id)
+        {
+            // The permit will cover this width: the deployed line's at the forest edge, otherwise the formation's (S2b).
+            progress.SquadHalfWidth = progress.Deployment?.HalfWidth ?? SquadSlots.HalfWidth(simulation, led);
+        }
+
+        CombatQueries.SetActivity(unit, UnitActivity.WaitingForPermission);
+        simulation.Log(new PermissionRequested(simulation.TimeSeconds, unit.Id, crossing.BoundaryId, crossing.At));
+    }
+
+    /// <summary>
+    /// A squad leader that must ask to leave the forest walks on along its reference route to its deployment point inside
+    /// the edge first (S2c), with its squad following in formation.
+    /// </summary>
+    private static void ApproachEdge(
+        Simulation simulation, IWorldQuery world, Unit unit, CorridorProgress progress, Squads.Squad squad,
+        List<Vec2> referenceRoute, BoundaryCrossing crossing, double costSeconds)
+    {
+        progress.EdgeCrossing = crossing;
+        progress.Route = EdgeDeployment.RouteToEdge(world, referenceRoute, crossing.At, simulation.Config.SquadDoctrine.EdgeInsetMeters);
+        progress.Next = 1;
+        if (progress.Route.Count < 2)
+        {
+            BeginDeployment(simulation, unit, progress, squad); // already at the edge
+            return;
+        }
+
+        progress.State = CorridorState.Moving;
+        CombatQueries.SetActivity(unit, UnitActivity.Moving);
+        simulation.Log(new PathPlanned(simulation.TimeSeconds, unit.Id, progress.Route.Skip(1).ToList(), costSeconds));
+    }
+
+    /// <summary>At its deployment point the leader commands the squad into its open line along the edge (S2c).</summary>
+    private static void BeginDeployment(Simulation simulation, Unit unit, CorridorProgress progress, Squads.Squad squad)
+    {
+        var line = EdgeDeployment.Line(simulation, squad, unit.Position.Xy, progress.EdgeCrossing!.At);
+        squad.EdgeDeployment = line;
+        progress.Deployment = line;
+        progress.State = CorridorState.Deploying;
+        progress.DeploymentCommandedAt = simulation.TimeSeconds;
+        unit.Velocity = Vec3.Zero;
+        CombatQueries.SetActivity(unit, UnitActivity.WaitingForSquad);
+        SquadSystem.Command(simulation, squad, unit, line.Command);
+    }
+
+    /// <summary>
+    /// The leader asks to leave the forest once every able member that follows the squad stands in its spot
+    /// (<see cref="EdgeDeployed"/>), or when the deployment time is up.
+    /// </summary>
+    private static void CheckDeployment(Simulation simulation, Unit unit, CorridorProgress progress)
+    {
+        var line = progress.Deployment!;
+        var crossing = progress.EdgeCrossing!;
+        if (simulation.SquadOf(unit.Id) is not { } squad || squad.LeaderId != unit.Id)
+        {
+            Request(simulation, unit, progress, crossing);
+            return;
+        }
+
+        var deployed = squad.Members.All(m =>
+            m.UnitId == unit.Id || !squad.IsFollowing(m.UnitId) ||
+            simulation.GetUnit(m.UnitId).Health == Combat.Health.OutOfAction ||
+            !line.Spots.TryGetValue(m.UnitId, out var spot) || // rejoined after the line was laid out: no spot to wait for
+            (line.Acted.Contains(m.UnitId) && simulation.GetUnit(m.UnitId).Position.Xy.DistanceTo(spot) <= InSpotMeters));
+        if (deployed)
+        {
+            simulation.Log(new EdgeDeployed(simulation.TimeSeconds, unit.Id, squad.Id));
+            Request(simulation, unit, progress, crossing);
+        }
+        else if (simulation.TimeSeconds >= progress.DeploymentCommandedAt + simulation.Config.SquadDoctrine.EdgeDeploymentSeconds - TimeEpsilon)
+        {
+            Request(simulation, unit, progress, crossing);
+        }
+        else
+        {
+            CombatQueries.SetActivity(unit, UnitActivity.WaitingForSquad);
+        }
+    }
+
+    /// <summary>A member stands in its spot in the line when it is this close to it, in metres.</summary>
+    private const double InSpotMeters = 0.5;
 
     /// <summary>The route the agent walks: its position, the path's cell centers, then the exact destination.</summary>
     private static List<Vec2> FullRoute(Vec2 from, IReadOnlyList<Vec2> waypoints, Vec2 to)
@@ -212,7 +325,20 @@ public sealed class CorridorMovementSystem : ISimSystem
         }
 
         unit.Position = position.WithZ(world.GroundHeight(position.X, position.Y));
-        if (progress.Next >= route.Count)
+        if (progress.Next >= route.Count && progress.EdgeCrossing is { } edge && progress.Deployment is null)
+        {
+            // At its deployment point inside the forest edge (S2c); without a squad to deploy any more, it just asks.
+            unit.Velocity = Vec3.Zero;
+            if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+            {
+                BeginDeployment(simulation, unit, progress, squad);
+            }
+            else
+            {
+                Request(simulation, unit, progress, edge);
+            }
+        }
+        else if (progress.Next >= route.Count)
         {
             progress.State = CorridorState.Finished;
             unit.Velocity = Vec3.Zero;
@@ -246,6 +372,9 @@ internal enum CorridorState
     Moving,
     Waiting,
     Finished,
+
+    /// <summary>A squad leader at the forest edge waiting for its squad to deploy before it asks (S2c).</summary>
+    Deploying,
 }
 
 /// <summary>A unit's progress through one <see cref="MoveThroughCorridor"/> order.</summary>
@@ -264,7 +393,19 @@ internal sealed class CorridorProgress(MoveThroughCorridor order)
 
     public double RequestedAt { get; set; }
 
+    /// <summary>A squad leader's formation half-width when it asked: a grant covers the squad within radius plus this.</summary>
+    public double SquadHalfWidth { get; set; }
+
     public List<Vec2> Route { get; set; } = [];
+
+    /// <summary>The forest-edge crossing a squad leader is walking up to, to deploy before it asks (S2c).</summary>
+    public BoundaryCrossing? EdgeCrossing { get; set; }
+
+    /// <summary>The squad's open line at the edge, from the deployment command until the squad moves on (S2c).</summary>
+    public Squads.EdgeLine? Deployment { get; set; }
+
+    /// <summary>When the leader commanded the deployment.</summary>
+    public double DeploymentCommandedAt { get; set; }
 
     public int Next { get; set; }
 }

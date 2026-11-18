@@ -40,11 +40,14 @@ public sealed record ActivityChanged(double Time, string AgentId, UnitActivity A
 /// <param name="CostSeconds">Planned travel time including corridor penalties.</param>
 public sealed record PathPlanned(double Time, string AgentId, IReadOnlyList<Vec2> Waypoints, double CostSeconds) : SimEvent(Time, AgentId);
 
-/// <summary>An agent asked its leader for permission to cross a hard boundary, and waits in place.</summary>
+/// <summary>
+/// An agent asked its leader for permission to cross a hard boundary, and waits in place. A squad leader asks its platoon
+/// leader (the scripted leader); a squad member asks its squad leader, who passes the request on (backlog 0004, S2b).
+/// </summary>
 /// <param name="Time">Simulated time.</param>
 /// <param name="AgentId">The agent.</param>
 /// <param name="BoundaryId">The boundary.</param>
-/// <param name="At">The crossing point on the reference route.</param>
+/// <param name="At">The crossing point: on the agent's reference route, or for a squad member on its way to its slot.</param>
 public sealed record PermissionRequested(double Time, string AgentId, string BoundaryId, Vec2 At) : SimEvent(Time, AgentId);
 
 /// <summary>The leader answered a permission request.</summary>
@@ -194,6 +197,30 @@ public sealed record LeaderChanged(double Time, string AgentId, string SquadId) 
 /// <param name="SquadId">The squad.</param>
 /// <param name="Team">The team.</param>
 public sealed record TeamLeaderChanged(double Time, string AgentId, string SquadId, string Team) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// A new squad leader that did not hear its predecessor's movement order asked the platoon leader for it (backlog 0004,
+/// S2b).
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The new leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record OrderRequested(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
+/// <summary>The platoon leader repeated the squad's movement order to its new leader (backlog 0004, S2b).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The new leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record OrderRepeated(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// The squad has deployed in its open line at the forest edge (backlog 0004, S2c): every able member stands in its spot.
+/// Its leader asks to leave the forest on the same step.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The squad leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record EdgeDeployed(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
 
 /// <summary>One squad in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The squad.</param>

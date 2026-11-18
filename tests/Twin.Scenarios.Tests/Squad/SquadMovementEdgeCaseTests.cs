@@ -9,8 +9,8 @@ namespace Twin.Scenarios.Tests.Squad;
 
 /// <summary>
 /// Edge cases of squad movement found in review (backlog 0004, S2a): a member whose slot is far away behind an obstacle
-/// still finds its way, and a squad whose leader falls mid-move does not walk off in an arbitrary direction while it
-/// has no leader with a movement order (passing the order to the successor is not part of S2a).
+/// still finds its way, and a squad whose leader falls mid-move does not walk off in an arbitrary direction. Since S2b the
+/// successor carries the order on, so the members re-form round it along its route.
 /// </summary>
 public class SquadMovementEdgeCaseTests
 {
@@ -41,7 +41,7 @@ public class SquadMovementEdgeCaseTests
     }
 
     [Fact]
-    public void Members_hold_their_ground_when_the_leader_falls_mid_move()
+    public void Members_re_form_round_the_successor_along_its_route_when_the_leader_falls_mid_move()
     {
         // red stands 6 m north of the route at x = 200 and holds fire until ordered.
         var sim = Scenario.ForSquad()
@@ -55,13 +55,16 @@ public class SquadMovementEdgeCaseTests
         var members = SpecSquad.Reference().Members.Select(m => m.UnitId).Where(id => id != "rj").ToList();
         var before = members.ToDictionary(id => id, id => sim.Unit(id).Position.Xy);
 
-        sim.RunFor(TimeSpan.FromSeconds(60)); // vj takes command after 5 s, with no movement order of its own
+        sim.RunFor(TimeSpan.FromSeconds(60)); // vj takes command after 5 s and carries the order on (S2b)
 
         Assert.Equal("vj", sim.Squad("r1").LeaderId);
-        foreach (var id in members)
+        var leader = sim.Unit("vj").Position.Xy;
+        foreach (var id in members.Where(id => id != "vj"))
         {
-            Assert.True(sim.Unit(id).Position.Xy.DistanceTo(before[id]) <= 1,
-                $"{id} moved {sim.Unit(id).Position.Xy.DistanceTo(before[id]):0.##} m without a leader's movement order");
+            sim.ShouldBeInSlot(id, toleranceMeters: 1);
+            Assert.True(sim.Unit(id).Position.Xy.DistanceTo(leader) <= 6 * SpecSquad.IntervalMeters,
+                $"{id} is {sim.Unit(id).Position.Xy.DistanceTo(leader):0.##} m from the new leader: it walked off");
+            Assert.True(sim.Unit(id).Position.Xy.DistanceTo(before[id]) <= 6 * SpecSquad.IntervalMeters);
         }
     }
 }
