@@ -4,10 +4,17 @@ using Twin.Testing;
 namespace Twin.Sim.Tests.Squads;
 
 /// <summary>
-/// Formation slots (backlog 0004, S2a: FO1), before compression. A slot is <c>(along, across)</c> relative to the squad
-/// leader: along its path (positive ahead) and across it (positive to the left). Formation order, front to back: the
-/// teams without the squad leader or the second-in-command (the point team), then the squad leader's team, then the
-/// second-in-command's team; within a team, squad order. Reference squad: pj, k1, k2, rj, j1, j2, vj, kk, t1.
+/// Formation slots (backlog 0004, S2a: FO1; the wedge redefined in S2c, decision 20), before compression. A slot is
+/// <c>(along, across)</c> relative to the squad leader: along its path (positive ahead) and across it (positive to the
+/// left). Formation order (the file), front to back: the teams without the squad leader or the second-in-command (the
+/// point team), then the squad leader's team, then the second-in-command's team; within a team, squad order. Reference
+/// squad: pj, k1, k2, rj, j1, j2, vj, kk, t1.
+/// <para>
+/// The open line, left to right: the second-in-command's team (riflemen outermost, then the second-in-command, then the
+/// machine gunner next to the squad leader), the squad leader and its team in squad order, then the other teams in team
+/// order, each in squad order. Reference squad: t1, vj, kk, rj, j1, j2, pj, k1, k2. The wedge is that line folded back
+/// at its middle member (j1), so the squad leader walks its left arm.
+/// </para>
 /// </summary>
 public class FormationSlotsTests
 {
@@ -39,25 +46,29 @@ public class FormationSlotsTests
     }
 
     [Fact]
-    public void FO1_a_wedge_has_its_apex_at_the_first_member_and_the_leader_on_its_axis()
+    public void FO1_the_open_line_puts_the_support_team_left_with_its_machine_gunner_next_to_the_leader_and_the_point_team_right() =>
+        Assert.Equal(["t1", "vj", "kk", "rj", "j1", "j2", "pj", "k1", "k2"], FormationSlots.LineOrder(SpecSquad.Reference().Definition));
+
+    [Fact]
+    public void FO1_a_wedge_is_the_open_line_folded_back_at_its_middle_member()
     {
-        // Rank r is r steps back from the apex; the leader walks the axis at rank 2 (its arm slot, left, stays empty).
-        //         pj
-        //       k1  k2
-        //     ·  rj  j1
-        //   j2          vj
-        // kk              t1
+        // Rank r is r steps back from the apex (j1, the middle of the line); the leader walks the left arm at rank 1.
+        //               j1
+        //            rj    j2
+        //         kk          pj
+        //      vj                k1
+        //   t1                      k2
         var expected = new (string Id, int Rank, int Side)[]
         {
-            ("pj", 0, 0), ("k1", 1, 1), ("k2", 1, -1), ("rj", 2, 0), ("j1", 2, -1), ("j2", 3, 1), ("vj", 3, -1),
-            ("kk", 4, 1), ("t1", 4, -1),
+            ("t1", 4, 1), ("vj", 3, 1), ("kk", 2, 1), ("rj", 1, 1), ("j1", 0, 0), ("j2", 1, -1), ("pj", 2, -1),
+            ("k1", 3, -1), ("k2", 4, -1),
         };
 
         foreach (var (id, rank, side) in expected)
         {
             var slot = Assert.Single(Slots(SquadFormation.Wedge), s => s.UnitId == id);
-            Assert.Equal((2 - rank) * S, slot.Along, precision: 9);
-            Assert.Equal(side * rank * S, slot.Across, precision: 9);
+            Assert.Equal((1 - rank) * S, slot.Along, precision: 9);          // relative to rj, one step back from the apex
+            Assert.Equal((side * rank * S) - S, slot.Across, precision: 9);  // rj is one step left of the apex
         }
     }
 
@@ -68,13 +79,11 @@ public class FormationSlotsTests
         double Distance(string a, string b) =>
             Math.Sqrt(Math.Pow(slots[a].Along - slots[b].Along, 2) + Math.Pow(slots[a].Across - slots[b].Across, 2));
 
-        foreach (var (a, b) in new[] { ("pj", "k1"), ("j2", "kk"), ("pj", "k2"), ("k2", "j1"), ("j1", "vj"), ("vj", "t1") })
+        var line = FormationSlots.LineOrder(SpecSquad.Reference().Definition);
+        for (var i = 1; i < line.Count; i++)
         {
-            Assert.Equal(D, Distance(a, b), precision: 9);
+            Assert.Equal(D, Distance(line[i - 1], line[i]), precision: 9);
         }
-
-        // The leader's own arm slot (left, rank 2) stays empty, so k1 and j2 are two intervals apart.
-        Assert.Equal(2 * D, Distance("k1", "j2"), precision: 9);
     }
 
     [Fact]

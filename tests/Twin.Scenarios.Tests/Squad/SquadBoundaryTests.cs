@@ -64,7 +64,7 @@ public class SquadBoundaryTests
     {
         var sim = Squad(OpenGround(), formation);
         sim.Order("rj", new MoveTo(new Vec2(200, 101))).RunUntilSquadSettled("r1", TenMinutes);
-        var corridor = Corridor(new Vec2(200, 101), width: 60, RoadAcross);
+        var corridor = Corridor(new Vec2(200, 101), width: 80, RoadAcross);
         var since = sim.Trail("rj").Count - 1;
         sim.Order("rj", new MoveThroughCorridor(corridor)).Step();
         return (sim, corridor, since);
@@ -76,7 +76,7 @@ public class SquadBoundaryTests
     {
         var sim = Squad(OpenGround(), formation);
         sim.Order("rj", new MoveTo(new Vec2(200, 101))).RunUntilSquadSettled("r1", TenMinutes);
-        var corridor = new Corridor([new(200, 101), new(260, 180)], 60, SpecV01.SoftMargin, SpecV01.SoftPenalty,
+        var corridor = new Corridor([new(200, 101), new(260, 180)], 80, SpecV01.SoftMargin, SpecV01.SoftPenalty,
             [Line("road", new(0, 150), new(500, 150))]);
         return sim.Order("rj", new MoveThroughCorridor(corridor)).Step();
     }
@@ -123,12 +123,12 @@ public class SquadBoundaryTests
 
         sim.Unit("rj").Should().BeAt(B);
         var permit = Assert.Single(sim.Squad("r1").Permits);
-        Assert.Equal(PermitRadius + (4 * SpecSquad.WedgeStepMeters), permit.Radius, precision: 6); // radius + half-width
+        Assert.Equal(PermitRadius + (5 * SpecSquad.WedgeStepMeters), permit.Radius, precision: 6); // radius + half-width (k2, right of rj)
         NoMemberCrossesUnpermitted(sim, (RasterWorld)sim.Terrain, corridor, since);
 
-        // In formation: t1, at the right end of the wedge, crosses the road 28.3 m right of the RJ's crossing.
-        var t1Crossing = TestGeometry.Crossings(sim.Trail("t1"), RoadAcross.Line).Single();
-        Assert.InRange(t1Crossing.Y, 101 - (4 * SpecSquad.WedgeStepMeters) - 1, 101 - (4 * SpecSquad.WedgeStepMeters) + 1);
+        // In formation: k2, at the right end of the wedge, crosses the road 35.4 m right of the RJ's crossing.
+        var k2Crossing = TestGeometry.Crossings(sim.Trail("k2"), RoadAcross.Line).Single();
+        Assert.InRange(k2Crossing.Y, 101 - (5 * SpecSquad.WedgeStepMeters) - 1, 101 - (5 * SpecSquad.WedgeStepMeters) + 1);
     }
 
     [Fact]
@@ -173,16 +173,16 @@ public class SquadBoundaryTests
     [Fact]
     public void SM5_slots_across_a_boundary_to_the_side_tuck_in_to_a_double_file()
     {
-        // A road runs along the route 8 m to its right (y = 93) across the whole map: the wedge's right arm beyond k2
-        // (j1, vj and t1, 14–28 m out) would stand across it.
+        // A road runs along the route 8 m to its right (y = 93) across the whole map: the wedge's right arm beyond its apex
+        // j1 (7.1 m out) — j2, pj, k1 and k2, 14–35 m out — would stand across it.
         var road = Line("road", new(0, 93), new(500, 93));
-        var corridor = Corridor(Start, width: 60, road);
+        var corridor = Corridor(Start, width: 80, road);
         var world = OpenGround();
         var sim = Squad(world, SquadFormation.Wedge);
 
         sim.Order("rj", new MoveThroughCorridor(corridor)).RunUntil(s => s.Unit("rj").Position.X > 250, TenMinutes, "rj past x = 250");
 
-        foreach (var id in new[] { "j1", "vj", "t1" })
+        foreach (var id in new[] { "j2", "pj", "k1", "k2" })
         {
             var slot = sim.Simulation.SlotOf(id)!.Value;
             Assert.InRange(slot.Y, 93, 94); // on the path's side of the road, at most 1 m from it
@@ -194,7 +194,7 @@ public class SquadBoundaryTests
     }
 
     // A road reaches up from the south edge to y = 95, 6 m short of the route, at x = 250. The RJ walks past its end;
-    // the wedge's right arm (k2 7 m out, then j1, vj and t1) must cross it.
+    // the wedge's right arm (its apex j1, 7.1 m out and 7.1 m ahead of rj, then j2, pj, k1 and k2) must cross it.
     private static readonly HardBoundary RoadEndingShort = Line("road", new(250, 0), new(250, 95));
 
     [Fact]
@@ -202,25 +202,25 @@ public class SquadBoundaryTests
     {
         var sim = Squad(OpenGround(), SquadFormation.Wedge);
 
-        sim.Order("rj", new MoveThroughCorridor(Corridor(Start, width: 60, RoadEndingShort)))
+        sim.Order("rj", new MoveThroughCorridor(Corridor(Start, width: 80, RoadEndingShort)))
             .RunUntil(s => s.Events.OfType<PermissionRequested>().Any(e => e.AgentId == "rj"), TenMinutes, "rj asks");
 
         var requests = sim.Events.OfType<PermissionRequested>().ToList();
         var member = requests.First();
-        Assert.Equal("k2", member.AgentId);                    // the first of the right arm to reach the road
+        Assert.Equal("j1", member.AgentId);                    // the apex, ahead of rj, reaches the road first
         Assert.Equal("road", member.BoundaryId);
         var leader = requests.Single(e => e.AgentId == "rj");
         Assert.Equal(("road", member.At), (leader.BoundaryId, leader.At));
         Assert.InRange(leader.Time, member.Time + SpecSquad.RelaySeconds - 1e-9, member.Time + SpecSquad.RelaySeconds + SpecV01.DtSeconds + 1e-9);
-        sim.Unit("k2").Should().HaveActivity(UnitActivity.WaitingForPermission);
-        Assert.True(sim.Unit("k2").Position.X < 250, "k2 waits before the road");
+        sim.Unit("j1").Should().HaveActivity(UnitActivity.WaitingForPermission);
+        Assert.True(sim.Unit("j1").Position.X < 250, "j1 waits before the road");
     }
 
     [Fact]
     public void SM5_the_squad_halts_while_a_members_request_is_answered_and_crosses_after_the_grant()
     {
         var world = OpenGround();
-        var corridor = Corridor(Start, width: 60, RoadEndingShort);
+        var corridor = Corridor(Start, width: 80, RoadEndingShort);
         var sim = Squad(world, SquadFormation.Wedge);
         sim.Order("rj", new MoveThroughCorridor(corridor))
             .RunUntil(s => s.Events.OfType<PermissionRequested>().Any(e => e.AgentId == "rj"), TenMinutes, "rj asks");
