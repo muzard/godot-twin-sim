@@ -209,7 +209,7 @@ public partial class ReplayHost : Node2D
         for (var i = _events.Count - 1; i >= 0 && lines.Count < EventLines; i--)
         {
             var e = _events[i];
-            if (e.Time > _time + EventReplay.TimeTolerance || e is AgentMoved)
+            if (e.Time > _time + EventReplay.TimeTolerance || e is AgentMoved or WatchChanged)
             {
                 continue;
             }
@@ -238,6 +238,13 @@ public partial class ReplayHost : Node2D
         SuppressionStarted => "suppressed",
         SuppressionEnded => "no longer suppressed",
         PostureChanged p => $"posture {p.Posture}",
+        EnemySpotted s => $"spots {s.EnemyId}",
+        SpotReported r => $"reports {r.EnemyId}",
+        SpotReceived r => $"hears of {r.EnemyId} from {r.ReporterId}",
+        SquadHalted h => $"squad {h.SquadId} halts ({h.EnemyId})",
+        SquadResumed r => $"squad {r.SquadId} moves on",
+        EdgeDeployed d => $"squad {d.SquadId} deployed at the forest edge",
+        ContactReported c => $"contact: {c.AttackerId}",
         _ => e.GetType().Name,
     };
 

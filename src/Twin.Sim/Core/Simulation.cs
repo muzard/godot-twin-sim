@@ -23,6 +23,7 @@ public sealed class Simulation
     private readonly IReadOnlyList<ISimSystem> _systems;
     private readonly List<SimEvent> _events = [];
     private readonly SortedDictionary<string, AgentSnapshot> _logged = new(StringComparer.Ordinal);
+    private readonly SortedDictionary<string, WatchSnapshot> _loggedWatch = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, Squad> _squads = new(StringComparer.Ordinal);
     private readonly SortedDictionary<string, Squad> _squadOfUnit = new(StringComparer.Ordinal);
     private int _lastCommandId;
@@ -168,13 +169,14 @@ public sealed class Simulation
     public WorldSnapshot Snapshot() =>
         new(TimeSeconds, _units.Values
             .Select(u => new AgentSnapshot(u.Id, u.Position, u.Activity, u.Health, u.Posture, u.IsSuppressed,
-                u.IsHeavilySuppressed, u.DrillStage, u.IsAwaitingOrders))
+                u.IsHeavilySuppressed, u.DrillStage, u.IsAwaitingOrders, u.Combatant?.Side))
             .ToList())
         {
             Squads = _squads.Values
                 .Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds], s.Formation, s.IsHalted)).ToList(),
             KnownEnemies = _units.Values
                 .SelectMany(u => u.KnownEnemies.Select(k => new KnownEnemySnapshot(u.Id, k.Key, k.Value))).ToList(),
+            Watches = _units.Values.Select(Watch).ToList(),
         };
 
     /// <summary>Gets a unit by id.</summary>
@@ -471,7 +473,8 @@ public sealed class Simulation
     {
         _units.Add(unit.Id, unit);
         _logged[unit.Id] = new AgentSnapshot(unit.Id, unit.Position, unit.Activity);
-        Log(new AgentPlaced(TimeSeconds, unit.Id, unit.Position));
+        _loggedWatch[unit.Id] = new WatchSnapshot(unit.Id, Unit.InitialWatchDirection, [], false); // as replay starts it
+        Log(new AgentPlaced(TimeSeconds, unit.Id, unit.Position, unit.Combatant?.Side));
         return unit;
     }
 
@@ -492,8 +495,18 @@ public sealed class Simulation
             }
 
             _logged[unit.Id] = new AgentSnapshot(unit.Id, unit.Position, unit.Activity);
+            var watch = Watch(unit);
+            var lastWatch = _loggedWatch[unit.Id];
+            if (watch.Direction != lastWatch.Direction || watch.WatchesAir != lastWatch.WatchesAir ||
+                !watch.Sectors.SequenceEqual(lastWatch.Sectors))
+            {
+                Log(new WatchChanged(TimeSeconds, unit.Id, watch.Direction, watch.Sectors, watch.WatchesAir));
+                _loggedWatch[unit.Id] = watch;
+            }
         }
     }
+
+    private static WatchSnapshot Watch(Unit unit) => new(unit.Id, unit.WatchDirection, unit.ObservationSectors, unit.WatchesAir);
 
     private void ValidateFireAt(Unit unit, FireAt order)
     {

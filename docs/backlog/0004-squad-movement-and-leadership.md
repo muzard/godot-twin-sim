@@ -645,7 +645,9 @@ FO5 with k2's slot in a building, the cliff and bog comments), S2b's (SM4 permit
 crossing, SM5 tucks j2, pj, k1 and k2, and j1 the apex asks first), and the default corridor of the S2a movement and
 formation tests widened from 60 to 80 m (S2b's wedge tests too) so the wider wedge fits without compression.
 
-Known limitations of S2c: headings and sectors are not in the event log or the replay yet (S2d); sectors do not affect
+Known limitations of S2c: headings and sectors are not in the event log or the replay yet (S2d; *since the st1 ambush
+demo the watch direction, the sectors and the air watch are logged as `WatchChanged` and replayed, and `AgentPlaced`
+carries the side; `Unit.Heading` is still not logged*); sectors do not affect
 seeing until the observation model; the line's second-line rule is provisional (compression may replace it).
 Choices made while implementing: while the RJ walks up to the edge and while the squad is deployed, a member that reaches
 the forest edge waits there without asking (the RJ asks for the squad); the edge's direction is fitted through the edge

@@ -168,8 +168,8 @@ public sealed class SquadCohesionSystem : ISimSystem
                 return true;
             }
 
-            if (deployingAtEdge && SquadSlots.FirstUnpermittedCrossing(simulation, squad, [unit.Position.Xy, slots[member.UnitId]])
-                is { BoundaryId: HardBoundary.ForestEdgeId })
+            if (deployingAtEdge && SquadFollowSystem.CrossingAhead(simulation, squad, unit.Position.Xy, slots[member.UnitId])
+                is { Crossing.BoundaryId: HardBoundary.ForestEdgeId })
             {
                 continue; // it waits at the edge for the leader to come up and deploy the squad (S2c)
             }
@@ -359,7 +359,7 @@ public sealed class SquadFollowSystem : ISimSystem
     /// The first boundary the squad has no permit for on the straight way from the member to its slot, with the point where
     /// the member stops short of it: just before a drawn line, or at the last point still inside the forest. Null if none.
     /// </summary>
-    private static (BoundaryCrossing Crossing, Vec2 StopAt)? CrossingAhead(Simulation simulation, Squad squad, Vec2 from, Vec2 to)
+    internal static (BoundaryCrossing Crossing, Vec2 StopAt)? CrossingAhead(Simulation simulation, Squad squad, Vec2 from, Vec2 to)
     {
         var samples = Math.Max(1, (int)Math.Ceiling(from.DistanceTo(to) / SampleMeters));
         var previous = from;
