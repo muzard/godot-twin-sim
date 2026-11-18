@@ -112,6 +112,10 @@ public sealed class UnitAssertions
     public UnitAssertions BeIn(Posture expected) =>
         Check(_unit.Posture == expected, $"to be {expected}");
 
+    /// <summary>The unit is not in the given posture.</summary>
+    public UnitAssertions NotBeIn(Posture unexpected) =>
+        Check(_unit.Posture != unexpected, $"not to be {unexpected}");
+
     /// <summary>The unit's activity is <paramref name="expected"/> (for example waiting for its squad, backlog 0004).</summary>
     public UnitAssertions HaveActivity(UnitActivity expected) =>
         Check(_unit.Activity == expected, $"to have activity {expected}");
