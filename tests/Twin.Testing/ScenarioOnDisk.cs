@@ -34,14 +34,18 @@ public sealed class ScenarioOnDisk
     /// </summary>
     public bool? DetourWithoutCrossing { get; }
 
-    /// <summary>Loads <c>scenarios/&lt;name&gt;/scenario.json</c> and its world. Fails clearly if files are missing.</summary>
+    /// <summary>
+    /// Loads <c>scenarios/&lt;name&gt;/scenario.json</c> and its world (<c>world/</c>, or the directory its <c>world</c> key
+    /// names, backlog 0004 S2d). Fails clearly if files are missing.
+    /// </summary>
     public static ScenarioOnDisk Load(string name)
     {
         var file = ScenarioFiles.Require(name, "scenario.json");
-        ScenarioFiles.Require(name, Path.Combine("world", "manifest.json"));
+        using var json = JsonDocument.Parse(File.ReadAllText(file));
+        var world = json.RootElement.TryGetProperty("world", out var worldPath) ? worldPath.GetString() ?? "world" : "world";
+        ScenarioFiles.Require(name, Path.Combine(world, "manifest.json"));
         var definition = ScenarioDefinition.Load(ScenarioFiles.Directory(name));
 
-        using var json = JsonDocument.Parse(File.ReadAllText(file));
         bool? detour = json.RootElement.TryGetProperty("expect", out var expect) &&
                        expect.TryGetProperty("detourWithoutCrossing", out var value)
             ? value.GetBoolean()
