@@ -21,6 +21,11 @@ namespace Twin.Sim.Systems;
 /// the members whose role is <see cref="SquadRole.TeamLeader"/>, then anyone, in squad order; for a team: its next member
 /// in squad order) takes over after the takeover time. A team leader passes on a command it has acted on even if it is
 /// out of action before the relay time has passed. Runs after firing, so a leader shot out of action leaves its place on the same step.
+/// Suppression slows all of it (backlog 0004 S5a2): a suppressed member reacts, relays and takes over
+/// <see cref="SquadDoctrine.SuppressedDelayFactor"/> times slower, a heavily suppressed one
+/// <see cref="SquadDoctrine.HeavilySuppressedDelayFactor"/> times, judged when the command reaches it, when it passes the
+/// command on, or when its takeover starts. A squad posture command that reaches a member in the drill is taken when the
+/// drill ends.
 /// </summary>
 public sealed class SquadSystem : ISimSystem
 {
@@ -68,7 +73,7 @@ public sealed class SquadSystem : ISimSystem
             {
                 var relayTo = teamLeader == member.UnitId ? WaitingForTheirTeamLeader(simulation, squad, member) : [];
                 squad.Deliveries.Add(new Squad.Delivery(
-                    member.UnitId, commandId, command, now + doctrine.ReactionSeconds(experience), relayTo));
+                    member.UnitId, commandId, command, now + (doctrine.ReactionSeconds(experience) * Slowed(simulation, member.UnitId)), relayTo));
             }
 
             // Otherwise the member waits for its team leader to pass the command on, or, with no team leader, the
@@ -82,6 +87,16 @@ public sealed class SquadSystem : ISimSystem
                 !SquadDoctrine.ActsDirectly(ExperienceOf(simulation, m.UnitId)))
             .Select(m => m.UnitId)
             .ToList();
+
+    /// <summary>As <see cref="Slowed"/>, for a successor that may not exist.</summary>
+    private static double SlowedOrOne(Simulation simulation, string? unitId) => unitId is null ? 1 : Slowed(simulation, unitId);
+
+    /// <summary>How many times slower the member reacts in its suppression state now (backlog 0004 S5a2).</summary>
+    private static double Slowed(Simulation simulation, string unitId)
+    {
+        var unit = simulation.GetUnit(unitId);
+        return simulation.Config.SquadDoctrine.DelayFactor(unit.IsSuppressed, unit.IsHeavilySuppressed);
+    }
 
     /// <summary>A member's experience: its own as a fighter (<see cref="Simulation.AddSquad"/> accepts only fighters).</summary>
     private static Experience ExperienceOf(Simulation simulation, string unitId) =>
@@ -107,7 +122,9 @@ public sealed class SquadSystem : ISimSystem
             foreach (var recipient in delivery.RelayTo)
             {
                 // Counted from when the team leader was due to act, so ticks never add up to extra delay.
-                var relayed = delivery.Due + doctrine.RelaySeconds + doctrine.ReactionSeconds(ExperienceOf(simulation, recipient));
+                // A suppressed team leader passes it on later, and a suppressed recipient acts later (S5a2).
+                var relayed = delivery.Due + (doctrine.RelaySeconds * Slowed(simulation, unit.Id)) +
+                    (doctrine.ReactionSeconds(ExperienceOf(simulation, recipient)) * Slowed(simulation, recipient));
                 squad.Deliveries.Add(new Squad.Delivery(recipient, delivery.CommandId, delivery.Command, relayed, []));
             }
         }
@@ -122,6 +139,9 @@ public sealed class SquadSystem : ISimSystem
     {
         switch (command)
         {
+            case SetSquadPosture posture when unit.Drill is not null:
+                unit.PostureAfterDrill = posture.Posture; // the drill keeps its posture; this one comes after it (S5a2)
+                break;
             case SetSquadPosture posture:
                 CombatQueries.WantPosture(unit, posture.Posture);
                 break;
@@ -157,7 +177,7 @@ public sealed class SquadSystem : ISimSystem
 
             var name = squad.Teams[team];
             var successor = squad.Members.FirstOrDefault(m => m.Team == name && !IsOut(simulation, m.UnitId))?.UnitId;
-            squad.TeamTakeovers[team] = Advance(squad.TeamTakeovers[team], successor, now, takeoverSeconds, out var takesOver);
+            squad.TeamTakeovers[team] = Advance(squad.TeamTakeovers[team], successor, now, takeoverSeconds * SlowedOrOne(simulation, successor), out var takesOver);
             if (takesOver is not null)
             {
                 squad.SetTeamLeader(team, takesOver);
@@ -182,7 +202,8 @@ public sealed class SquadSystem : ISimSystem
 
         var successor = SuccessionOrder(squad).FirstOrDefault(id => !IsOut(simulation, id));
         squad.LeaderTakeover = Advance(
-            squad.LeaderTakeover, successor, now, simulation.Config.SquadDoctrine.TakeoverSeconds, out var takesOver);
+            squad.LeaderTakeover, successor, now, simulation.Config.SquadDoctrine.TakeoverSeconds * SlowedOrOne(simulation, successor),
+            out var takesOver);
         if (takesOver is not null)
         {
             squad.LeaderId = takesOver;

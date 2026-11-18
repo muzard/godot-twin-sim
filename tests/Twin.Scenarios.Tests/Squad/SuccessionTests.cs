@@ -78,11 +78,21 @@ public class SuccessionTests
         var sim = ReferenceSquadWithEnemiesNextToItsLeaders();
 
         var outOfAction = sim.RunUntilOutOfAction("rj", "red", FiveMinutes);
-        sim.RunFor(TimeSpan.FromSeconds(Takeover + 1));
+        // j1 stands 3 m from rj and the fire at rj can suppress it, which slows its takeover (backlog 0004 S5a2): 3 while
+        // heavily suppressed, 1.5 while suppressed, from the suppression events in the log.
+        var last = sim.Events.Where(e => e.AgentId == "j1" && e.Time <= outOfAction + 1e-9)
+            .LastOrDefault(e => e is SuppressionStarted or SuppressionEnded);
+        var factor = last switch
+        {
+            SuppressionStarted { Heavy: true } => 3,
+            SuppressionStarted => 1.5,
+            _ => 1.0,
+        };
+        sim.RunFor(TimeSpan.FromSeconds((factor * Takeover) + 1));
 
         var takeover = Assert.Single(sim.Events.OfType<TeamLeaderChanged>());
         Assert.Equal(("j1", SpecSquad.CommandTeam), (takeover.AgentId, takeover.Team));
-        AtTakeoverTime(takeover.Time, outOfAction);
+        Assert.InRange(takeover.Time, outOfAction + (factor * Takeover) - 1e-9, outOfAction + (factor * Takeover) + SpecV01.DtSeconds + 1e-9);
         Assert.Equal("j1", sim.Squad("r1").TeamLeaderId(SpecSquad.CommandTeam));
     }
 

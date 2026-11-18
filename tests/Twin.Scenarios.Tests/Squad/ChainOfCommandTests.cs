@@ -191,12 +191,13 @@ public class ChainOfCommandTests
         var sim = PointTeamWithAnEnemyNextToItsLeader();
 
         var outOfAction = sim.RunUntilOutOfAction("pj", "red", FiveMinutes);
-        sim.RunFor(TimeSpan.FromSeconds(SpecSquad.TakeoverSeconds + 1));
+        // k1 stands 3 m from pj and the fire at pj can suppress it, which slows its takeover (backlog 0004 S5a2).
+        var takeoverSeconds = DelayFactor(sim, "k1", outOfAction) * SpecSquad.TakeoverSeconds;
+        sim.RunFor(TimeSpan.FromSeconds(takeoverSeconds + 1));
 
         var takeover = Assert.Single(sim.Events.OfType<TeamLeaderChanged>());
         Assert.Equal(("k1", "r1", SpecSquad.PointTeam), (takeover.AgentId, takeover.SquadId, takeover.Team));
-        Assert.InRange(takeover.Time, outOfAction + SpecSquad.TakeoverSeconds - 1e-9,
-            outOfAction + SpecSquad.TakeoverSeconds + SpecV01.DtSeconds + 1e-9);
+        Assert.InRange(takeover.Time, outOfAction + takeoverSeconds - 1e-9, outOfAction + takeoverSeconds + SpecV01.DtSeconds + 1e-9);
         Assert.Equal("k1", sim.Squad("r1").TeamLeaderId(SpecSquad.PointTeam));
     }
 
@@ -247,7 +248,23 @@ public class ChainOfCommandTests
         var command = sim.Command("rj", GetDown);
         sim.RunFor(Plenty);
 
-        sim.ShouldHaveActedOn("k1", command, Inexperienced);                         // now the team leader
-        sim.ShouldHaveActedOn("k3", command, Inexperienced + Relay + Inexperienced); // through k1
+        // Suppression from the fire at pj slows k1 and k3 when the command reaches them (backlog 0004 S5a2).
+        var k1Reaction = DelayFactor(sim, "k1", command.Time) * Inexperienced;
+        sim.ShouldHaveActedOn("k1", command, k1Reaction); // now the team leader
+        var k1Acted = sim.ReceivedBy("k1", command)!.Time;
+        sim.ShouldHaveActedOn("k3", command,
+            k1Reaction + (DelayFactor(sim, "k1", k1Acted) * Relay) + (DelayFactor(sim, "k3", k1Acted) * Inexperienced)); // through k1
     }
+
+    /// <summary>
+    /// How many times slower <paramref name="id"/> reacts, relays and takes over at <paramref name="time"/> (backlog 0004
+    /// S5a2): 3 while heavily suppressed, 1.5 while suppressed, else 1, from the suppression events in the log.
+    /// </summary>
+    private static double DelayFactor(ScenarioRun sim, string id, double time) =>
+        sim.Events.Where(e => e.AgentId == id && e.Time <= time + 1e-9).LastOrDefault(e => e is SuppressionStarted or SuppressionEnded) switch
+        {
+            SuppressionStarted { Heavy: true } => 3,
+            SuppressionStarted => 1.5,
+            _ => 1,
+        };
 }

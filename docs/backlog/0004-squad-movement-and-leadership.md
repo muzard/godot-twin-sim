@@ -2,7 +2,8 @@
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
 (2026-11-17); S2a and S2b specified and implemented (2026-11-18); S2c specified and implemented (2026-11-18); S2d specified and implemented (2026-11-19); S5a1
-(spotting) specified and implemented (2026-11-18); S5a2–S6 have no tests yet. Drafted as 0003 in parallel with
+(spotting) specified and implemented (2026-11-18); S5a2 specified and implemented (2026-11-19); S5b–S6 have no tests
+yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -352,7 +353,7 @@ The mapping lives in one place in each: `SquadDoctrine.ActsDirectly` and `Reacti
 - A side effect: an inexperienced squad member is a `Conscript` in combat too (lower accuracy, lower suppression
   threshold, slower snap shot).
 
-#### Known limitations of S1 with 0003's drill (inputs to the S5 redesign)
+#### Known limitations of S1 with 0003's drill (inputs to the S5 redesign) — *resolved in S5a2: the drill wins*
 No S1 scenario reaches these (squads hold fire by default, and the drill does not start under `HoldFire`), and none is
 tested. They are recorded so S5 decides them on purpose:
 - **A squad posture command and the drill both set a member's posture, and the last one wins.** A "Maahan!" that
@@ -748,6 +749,75 @@ S5a is delivered in two parts. **S5a1: spotting** (observation, watch sectors, t
 below. **S5a2:** the rest of S5a (UF1, UF5–UF7, WS3: contact by fire up the chain, the enemy estimate, suppression
 slows command, the drill conflicts), built on S5a1's reports.
 
+#### S5a2 spec decisions (2026-11-19; tests reviewed and implemented)
+Decided with the product owner: contact by fire travels like a spot report; suppression slows commands 1.5 × / 3 ×; the
+enemy estimate is built from what the RJ knows; the drill wins over a squad posture command.
+- **Contact by fire reaches the RJ (UF1).** When a member reports contact in 0003's drill (`ContactReported`, after its
+  reaction and snap shots), the report is spoken as in S5a1: squad mates within voice range (30 m) learn of the attacker
+  and its position (`SpotReceived`), and if the RJ did not hear it, the member nearest the RJ among those who know
+  repeats it after `t_relay`, until the RJ knows. When the RJ knows, the squad halts (S5a1).
+- **Weapon class (WS3).** Every weapon has a class (`WeaponClass`: `Rifle`, `MachineGun`, `HeavyMachineGun`;
+  `WeaponProfile.Class`). Whoever hears a shot learns the shooter's weapon class (`ShotHeard.WeaponClass`). A contact
+  report about an attacker carries the class the reporter heard, and so does every relay of it. `Twin.Sim` gets
+  `WeaponProfile.HeavyMachineGun` with backlog 0003's values.
+- **The enemy estimate (UF7).** The RJ's picture of the enemy (`Squad.EnemyEstimate`): `Fighters`, the number of
+  distinct enemies the RJ knows of (spotted itself, or from spot or contact reports), and `HeavyMachineGun`, true once
+  the RJ has heard a heavy machine gun itself or received a report naming one. Logged as
+  `EnemyEstimateChanged(squad, fighters, heavyMachineGun)` when it changes. A new RJ's estimate is what it knows. Enemies
+  out of action are not taken off yet; a strong fortification, the second reinforcing factor, has no model yet.
+- **Suppression slows command (UF5, UF6).** A member's reaction to a command is `1.5 ×` **[PROPOSAL, accepted]** its
+  normal reaction time while it is suppressed and `3 ×` while it is heavily suppressed (0003's two levels), judged when
+  the command reaches it (when it is given, or when its team leader passes it on). A team leader's relay time is
+  multiplied the same way, by its own state when it acts. A successor takes command (or a team) after `1.5 ×` or `3 ×`
+  `t_takeover`, by its state when the leader's place empties (or when it becomes the successor).
+- **The drill wins over a squad posture command (the two S1 limitations).** A member in 0003's drill keeps the drill's
+  posture; a squad posture command that reaches it meanwhile is remembered and taken when the drill ends (the drill
+  does not restore its old posture over it). `SetSquadPosture` to the RJ, like `SetPosture`, does not end the RJ's own
+  drill and keeps its current order.
+- **The squad's movement is suspended under contact, not lost.** The RJ's corridor order survives its own drill: after
+  the drill the squad is halted (S5a1) and `ResumeMovement` resumes the order in formation.
+
+#### API the S5a2 tests need from `Twin.Sim`
+- `WeaponClass` (`Rifle`, `MachineGun`, `HeavyMachineGun`), `WeaponProfile.Class` (default `Rifle`),
+  `WeaponProfile.HeavyMachineGun`; `ShotHeard.WeaponClass`.
+- `Squad.EnemyEstimate` (`Fighters`, `HeavyMachineGun`); event `EnemyEstimateChanged(Time, AgentId = RJ, SquadId,
+  Fighters, HeavyMachineGun)`.
+- A member reporting contact knows of its attacker from then on (`Simulation.KnowsOf`).
+
+#### S5a2 tests
+| Test | Checks |
+|---|---|
+| `WeaponClassTests` (pure) | the classes of rifle, machine gun and heavy machine gun; `WeaponProfile.HeavyMachineGun` = 0003's values |
+| `ShotHearingTests` (WS3) | a listener's `ShotHeard` carries the weapon class (rifle, machine gun, heavy machine gun) |
+| `ContactReportTests` (UF1) | mates within voice range of the contact reporter learn of the attacker at the report, those beyond do not; the report is passed on to a leader out of range and the squad halts; a leader shot at knows its attacker from its own report; the leader's movement order survives its drill and resumes after `ResumeMovement` |
+| `EnemyEstimateTests` (UF7) | the estimate counts distinct known enemies (1, then 2); a heavy machine gun heard marks it; rifle fire does not; the event survives the log |
+| `SuppressedCommandTests` (UF5, UF6) | heavily suppressed: acts after 3 × its reaction; suppressed: 1.5 ×; an unsuppressed neighbour: normal; a heavily suppressed team leader relays 3 × later; a heavily suppressed second-in-command takes command after 3 × `t_takeover` |
+| `DrillAndSquadPostureTests` | a member in the drill keeps the drill's posture when a squad posture command reaches it; when the drill ends it takes the commanded posture; `SetSquadPosture` does not end the leader's own drill |
+
+Changed with the product owner's approval in the implement phase (2026-11-19): three S1 tests (`ChainOfCommandTests`
+SQ4 takeover and relay, `SuccessionTests` SQ5 command team) now expect the takeover or reaction time times the
+member's suppression factor, because the fire at its leader 3 m away suppresses it (S5a2); and five S5a2 tests were
+fixed: a friend stood in the shooter's fire sector in `ShotHearingTests` and UF6 (so nobody fired), the estimate may
+grow 0 → 2 in one step, UF1 leaves out members that already knew of red from their own contact report, and the
+movement test lets the squad form up before red fires. Choice made while implementing: a member alerted while in the
+drill goes back, on `ResumeMovement`, to the posture it had before the drill (it was staying prone and crawling).
+
+Found in review and fixed: a heavy machine gun on the squad's own side no longer marks its estimate, and the estimate
+is empty while the leader's place is empty (`EnemyEstimateEdgeCaseTests` also covers a heavy machine gun named only in a
+contact report). Scenario files accept `heavyMachineGun` as a weapon.
+
+#### Known limitations of S5a2
+- The estimate can read 0 fighters with a heavy machine gun: hearing it marks the gun but does not tell where it is.
+- A relay that is dropped because the leader already knows of the enemy can drop the heavy machine gun it names.
+- Enemies out of action are not taken off the estimate.
+- `ResumeMovement` restores the posture from before the halt, overriding a squad posture command given during the halt
+  (or during the drill).
+- `SetSquadFormation` still ends the leader's own drill (only `SetSquadPosture` was decided).
+
+In the contact and estimate tests blue cannot spot anyone (its spotting takes 1000 s) and red's weapons have no muzzle
+flash, so contact reports and the sound of red's fire are the only way the squad learns of red. Kit: the machine guns of
+`SpecSuppression` get their classes; `UnitAssertions.NotBeIn`.
+
 #### S5a1 spec decisions (draft, 2026-11-18; values marked [PROPOSAL] are for review)
 **Observation (spotting).** Seeing is no longer instant. An observer spots an enemy after watching it continuously
 for the spotting time
@@ -873,8 +943,8 @@ the product owner with the S5a1 tests, 2026-11-18.)
 - **The combat demo** turns each side toward the other with `Watch`.
 
 #### Known limitations of S5a1 (inputs to the next parts)
-- A squad leader in 0003's drill keeps its movement order in the drill, so a halt suspends nothing and
-  `ResumeMovement` (which ends the drill) loses it. S5a2 (squad commands and the drill).
+- ~~A squad leader in 0003's drill keeps its movement order in the drill, so a halt suspends nothing and
+  `ResumeMovement` (which ends the drill) loses it.~~ *Resolved in S5a2: the halt keeps the order the drill dropped.*
 - A detached member (one with its own order) that learns of an enemy crouches but carries on with its order.
 - `Spotted` is permanent: an enemy that hides and reappears is fired at again at once. Losing track of an enemy, and
   movement revealing it, are later tickets.

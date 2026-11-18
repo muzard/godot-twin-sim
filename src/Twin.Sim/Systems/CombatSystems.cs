@@ -242,7 +242,11 @@ public sealed class FireSystem : ISimSystem
             if (listener != shooter && listener.Combatant is not null && listener.Health != Health.OutOfAction &&
                 listener.Position.Xy.DistanceTo(shooter.Position.Xy) <= weapon.SoundRangeMeters)
             {
-                simulation.Log(new ShotHeard(now, listener.Id, shooter.Id, shooter.Position.Xy));
+                simulation.Log(new ShotHeard(now, listener.Id, shooter.Id, shooter.Position.Xy, weapon.Class));
+                if (weapon.Class == WeaponClass.HeavyMachineGun && listener.Combatant.Side != combatant.Side)
+                {
+                    listener.KnowsHeavyMachineGun = true; // an enemy's, recognised by the sound (backlog 0004 S5a2)
+                }
             }
         }
 

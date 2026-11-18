@@ -67,7 +67,8 @@ public static class SpecSuppression
         FlashSeconds: 2,
         SuppressionPerRound: 1.5,
         RoundsPerBurst: 5,
-        SnapSecondsPerShot: 1);
+        SnapSecondsPerShot: 1,
+        Class: WeaponClass.MachineGun);
 
     /// <summary>Heavy machine gun 12.7 (values open, to be calibrated): S = 4, bursts of 5, 1500 m, 200 rounds.</summary>
     public static WeaponProfile HeavyMachineGun { get; } = new(
@@ -80,7 +81,8 @@ public static class SpecSuppression
         FlashSeconds: 2,
         SuppressionPerRound: 4.0,
         RoundsPerBurst: 5,
-        SnapSecondsPerShot: 1.5);
+        SnapSecondsPerShot: 1.5,
+        Class: WeaponClass.HeavyMachineGun);
 
     /// <summary>
     /// The weapon with a hit probability of zero: every round misses, but it still suppresses (pressure does not depend

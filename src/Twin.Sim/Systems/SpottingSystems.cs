@@ -175,7 +175,9 @@ public sealed class SpottingSystem : ISimSystem
 /// who know of it (the speaker itself, if nobody heard) repeats it <see cref="SquadDoctrine.RelaySeconds"/> later, again
 /// and again, so a broken chain is tried again; a relay due when the leader knows is dropped, and one whose speaker is out
 /// of action passes to the next nearest member who knows. Each step it also halts a squad whose leader knows of an enemy
-/// the squad has not halted for (a successor who knew of it, for example). Runs after spotting, before firing.
+/// the squad has not halted for (a successor who knew of it, for example). Contact reports from the drill under fire are
+/// spoken the same way, with the class of the attacker's weapon (backlog 0004 S5a2), and the system keeps the leader's
+/// <see cref="Squad.EnemyEstimate"/>. Runs after spotting, before firing.
 /// </summary>
 public sealed class SpotReportSystem : ISimSystem
 {
@@ -194,6 +196,27 @@ public sealed class SpotReportSystem : ISimSystem
             {
                 Speak(simulation, squad, report);
             }
+
+            Estimate(simulation, squad);
+        }
+    }
+
+    /// <summary>The leader's enemy estimate, logged when it changes (backlog 0004 S5a2). Not kept without observation.</summary>
+    private static void Estimate(Simulation simulation, Squad squad)
+    {
+        if (simulation.Config.Combat.Observation.IsOff)
+        {
+            return;
+        }
+
+        // While the leader's place is empty there is no estimate; a successor's estimate is what it knows.
+        var leader = squad.LeaderId is { } leaderId && simulation.GetUnit(leaderId) is { Health: not Health.OutOfAction } unit ? unit : null;
+        var estimate = leader is null ? EnemyEstimate.None : new EnemyEstimate(leader.KnownEnemies.Count, leader.KnowsHeavyMachineGun);
+        if (estimate != squad.EnemyEstimate)
+        {
+            squad.EnemyEstimate = estimate;
+            simulation.Log(new EnemyEstimateChanged(
+                simulation.TimeSeconds, leader?.Id ?? squad.LeaderId ?? string.Empty, squad.Id, estimate.Fighters, estimate.HeavyMachineGun));
         }
     }
 
@@ -221,6 +244,12 @@ public sealed class SpotReportSystem : ISimSystem
         var range = simulation.Config.SquadDoctrine.VoiceRangeMeters;
         foreach (var hearer in squad.Members.Select(m => simulation.GetUnit(m.UnitId)))
         {
+            if (hearer != speaker && hearer.Health != Health.OutOfAction && report.Class == WeaponClass.HeavyMachineGun &&
+                hearer.Position.Xy.DistanceTo(speaker.Position.Xy) <= range)
+            {
+                hearer.KnowsHeavyMachineGun = true; // the report names the weapon (backlog 0004 S5a2)
+            }
+
             if (hearer != speaker && hearer.Health != Health.OutOfAction && !hearer.KnownEnemies.ContainsKey(report.EnemyId) &&
                 hearer.Position.Xy.DistanceTo(speaker.Position.Xy) <= range)
             {
@@ -240,7 +269,8 @@ public sealed class SpotReportSystem : ISimSystem
         if (NearestKnower(simulation, squad, report.EnemyId, leader?.Position.Xy ?? speaker.Position.Xy) is { } next)
         {
             squad.PendingReports.Add(new Squad.SpotReport(
-                next.Id, report.EnemyId, report.EnemyPosition, report.Due + simulation.Config.SquadDoctrine.RelaySeconds, IsRelay: true));
+                next.Id, report.EnemyId, report.EnemyPosition, report.Due + simulation.Config.SquadDoctrine.RelaySeconds, IsRelay: true,
+                report.Class));
         }
     }
 
@@ -294,6 +324,32 @@ internal static class SquadAlerts
         if (squad.LeaderId == unit.Id)
         {
             Halt(simulation, squad, unit, enemyId);
+        }
+    }
+
+    /// <summary>
+    /// A member reported contact in the drill under fire (backlog 0004 S5a2): it knows of its attacker from now on, and the
+    /// report is spoken at once as a spot report, with the class of the attacker's weapon, which it heard (when observation
+    /// is modelled; with <see cref="ObservationRules.Off"/> nothing is reported).
+    /// </summary>
+    public static void ContactReported(Simulation simulation, Unit unit, string attackerId, Vec2 position)
+    {
+        if (simulation.Config.Combat.Observation.IsOff)
+        {
+            return;
+        }
+
+        var attacker = simulation.GetUnit(attackerId);
+        var weaponClass = attacker.Combatant?.Weapon.Class;
+        if (weaponClass == WeaponClass.HeavyMachineGun)
+        {
+            unit.KnowsHeavyMachineGun = true;
+        }
+
+        Learn(simulation, unit, attackerId, position, spotted: false);
+        if (simulation.SquadOf(unit.Id) is { } squad && !unit.Reported.Contains(attackerId))
+        {
+            squad.PendingReports.Add(new Squad.SpotReport(unit.Id, attackerId, position, simulation.TimeSeconds, IsRelay: false, weaponClass));
         }
     }
 
@@ -375,7 +431,8 @@ internal static class SquadAlerts
         }
 
         unit.IsAlerted = true;
-        unit.PostureBeforeAlert ??= unit.DesiredPosture;
+        // In the drill the drill decides the posture; the one to go back to is the posture from before the drill (S5a2).
+        unit.PostureBeforeAlert ??= unit.Drill?.PostureBefore ?? unit.DesiredPosture;
         if (unit.CurrentOrder is null && unit.Drill is null)
         {
             unit.Velocity = Vec3.Zero;
@@ -401,6 +458,10 @@ internal static class SquadAlerts
         {
             squad.SuspendedOrder = leader.CurrentOrder;
             CombatQueries.EndOrder(leader);
+        }
+        else if (leader.Drill?.SuspendedOrder is MoveTo or MoveThroughCorridor)
+        {
+            squad.SuspendedOrder = leader.Drill.SuspendedOrder; // the leader's drill dropped it; the halt keeps it (S5a2)
         }
 
         foreach (var member in squad.Members)
