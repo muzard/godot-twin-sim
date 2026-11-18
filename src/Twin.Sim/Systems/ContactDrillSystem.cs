@@ -18,8 +18,9 @@ namespace Twin.Sim.Systems;
 /// <item>returns fire: crouching at a covered firing position, prone elsewhere.</item>
 /// </list>
 /// It moves rushing (crouching) when not suppressed, crawling when lightly suppressed, and not at all when more heavily
-/// suppressed or pinned. From its contact report it waits for orders; any new order ends the drill. Runs after movement
-/// and before <see cref="FireSystem"/>.
+/// suppressed or pinned. From its contact report it waits for orders; any new order ends the drill (a squad posture
+/// command does not). In a squad the contact report is spoken to its squad mates like a spot report (backlog 0004 S5a2).
+/// Runs after movement and before <see cref="FireSystem"/>.
 /// </summary>
 public sealed class ContactDrillSystem : ISimSystem
 {
@@ -38,7 +39,9 @@ public sealed class ContactDrillSystem : ISimSystem
             {
                 case ContactDrillStage.SnapShots when SnapShotsOver(simulation, unit, drill):
                     TakeCover(simulation, unit, drill);
-                    simulation.Log(ReportContact(simulation, unit));
+                    var contact = ReportContact(simulation, unit);
+                    simulation.Log(contact);
+                    SquadAlerts.ContactReported(simulation, unit, contact.AttackerId, contact.AttackerPosition);
                     break;
                 case ContactDrillStage.MovingToCover when Move(simulation, unit, drill, dtSeconds):
                     TakeFiringPosition(simulation, unit, drill);
@@ -94,7 +97,8 @@ public sealed class ContactDrillSystem : ISimSystem
 
         agent.Drill = null;
         agent.IsAwaitingOrders = false;
-        agent.DesiredPosture = drill.PostureBefore;
+        agent.DesiredPosture = agent.PostureAfterDrill ?? drill.PostureBefore; // a squad posture command given during it wins
+        agent.PostureAfterDrill = null;
         agent.Velocity = Vec3.Zero;
         CombatQueries.SetActivity(agent, UnitActivity.Idle);
         Enter(simulation, agent, ContactDrillStage.None);

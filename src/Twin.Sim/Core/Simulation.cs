@@ -255,7 +255,7 @@ public sealed class Simulation
         foreach (var (unitId, order) in _pendingOrders)
         {
             var unit = _units[unitId];
-            if (order is not SetPosture && !(order is Rejoin && SquadOf(unitId)?.IsFollowing(unitId) == true))
+            if (order is not (SetPosture or SetSquadPosture) && !(order is Rejoin && SquadOf(unitId)?.IsFollowing(unitId) == true))
             {
                 ContactDrillSystem.End(this, unit);    // any new order ends the drill under fire
                 ContactDrillSystem.Answer(unit);       // and the leader's order stands against the fire it answers
@@ -618,6 +618,8 @@ public sealed class Simulation
             }
             hash.Add(unit.Heading.X);
             hash.Add(unit.Heading.Y);
+            hash.Add(unit.KnowsHeavyMachineGun ? 1 : 0);
+            hash.Add(unit.PostureAfterDrill is { } after ? (long)after : -1);
         }
 
         foreach (var squad in _squads.Values)
@@ -647,7 +649,11 @@ public sealed class Simulation
                 hash.Add(report.ReporterId);
                 hash.Add(report.EnemyId);
                 hash.Add(report.Due);
+                hash.Add(report.Class is { } weaponClass ? (long)weaponClass : -1);
             }
+
+            hash.Add(squad.EnemyEstimate.Fighters);
+            hash.Add(squad.EnemyEstimate.HeavyMachineGun ? 1 : 0);
 
             foreach (var enemyId in squad.HaltedFor)
             {

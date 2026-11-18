@@ -144,10 +144,11 @@ public sealed record CombatRules(
 /// <param name="SuppressionPerRound">S: how much a round passing close suppresses (calibre, crack, volume).</param>
 /// <param name="RoundsPerBurst">n: rounds in one shot event; 1 for a rifle.</param>
 /// <param name="SnapSecondsPerShot">Time between snap shots.</param>
+/// <param name="Class">What kind of weapon it is, which a listener recognises by the sound (backlog 0004 S5a2).</param>
 public sealed record WeaponProfile(
     double HitProbabilityAtZero, double HitFalloffMeters, double MaxRangeMeters, double SecondsPerShot, int Rounds,
     double SoundRangeMeters, double FlashSeconds, double SuppressionPerRound = 1.2, int RoundsPerBurst = 1,
-    double SnapSecondsPerShot = 0.7)
+    double SnapSecondsPerShot = 0.7, WeaponClass Class = WeaponClass.Rifle)
 {
     /// <summary>Backlog 0002 infantry rifle, with the backlog 0003 suppression values.</summary>
     public static WeaponProfile Rifle { get; } = new(0.6, 150, 600, 2, 150, 1500, 2);
@@ -157,7 +158,29 @@ public sealed record WeaponProfile(
     /// </summary>
     public static WeaponProfile MachineGun { get; } = new(
         HitProbabilityAtZero: 0.6, HitFalloffMeters: 200, MaxRangeMeters: 800, SecondsPerShot: 2, Rounds: 500,
-        SoundRangeMeters: 2000, FlashSeconds: 2, SuppressionPerRound: 1.5, RoundsPerBurst: 5, SnapSecondsPerShot: 1);
+        SoundRangeMeters: 2000, FlashSeconds: 2, SuppressionPerRound: 1.5, RoundsPerBurst: 5, SnapSecondsPerShot: 1,
+        Class: WeaponClass.MachineGun);
+
+    /// <summary>
+    /// Heavy machine gun 12.7 with backlog 0003's values (open, to be calibrated): S = 4, bursts of 5, 1500 m, 200 rounds.
+    /// </summary>
+    public static WeaponProfile HeavyMachineGun { get; } = new(
+        HitProbabilityAtZero: 0.6, HitFalloffMeters: 300, MaxRangeMeters: 1500, SecondsPerShot: 3, Rounds: 200,
+        SoundRangeMeters: 3000, FlashSeconds: 2, SuppressionPerRound: 4.0, RoundsPerBurst: 5, SnapSecondsPerShot: 1.5,
+        Class: WeaponClass.HeavyMachineGun);
+}
+
+/// <summary>What kind of weapon fired a shot, as a listener recognises it by the sound (backlog 0004 S5a2, WS3).</summary>
+public enum WeaponClass
+{
+    /// <summary>A rifle.</summary>
+    Rifle,
+
+    /// <summary>A machine gun (7.62).</summary>
+    MachineGun,
+
+    /// <summary>A heavy machine gun (12.7): a reinforcing factor in the squad leader's enemy estimate.</summary>
+    HeavyMachineGun,
 }
 
 /// <summary>What makes an agent a fighter.</summary>

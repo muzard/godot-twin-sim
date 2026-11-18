@@ -249,6 +249,7 @@ public partial class ReplayHost : Node2D
         SquadResumed r => $"squad {r.SquadId} moves on",
         EdgeDeployed d => $"squad {d.SquadId} deployed at the forest edge",
         ContactReported c => $"contact: {c.AttackerId}",
+        EnemyEstimateChanged x => $"squad {x.SquadId} estimate: {x.Fighters} enemies{(x.HeavyMachineGun ? ", heavy machine gun" : string.Empty)}",
         _ => e.GetType().Name,
     };
 

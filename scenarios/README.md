@@ -126,7 +126,8 @@ Points are ETRS-TM35FIN `[easting, northing]`, as read from a map; the simulatio
   ```
 
   Roles: `squadLeader`, `secondInCommand`, `teamLeader`, `machineGunner`, `rifleman`. A member's `experience`
-  (`conscript`, `regular`, `specialForces`; default `regular`), `weapon` (`rifle` or `machineGun`; default `rifle`) and
+  (`conscript`, `regular`, `specialForces`; default `regular`), `weapon` (`rifle`, `machineGun` or `heavyMachineGun`;
+  default `rifle`) and
   `rules` (`freeFire`, `returnFire`, `holdFire`; default the squad's, which defaults to `returnFire`) are optional, as is
   the squad's `formation` (`file` or `wedge`; default `file`). The squad is checked as the simulation checks any squad
   (one squad leader, a leader in every team, ...). Members start in their slots of the starting formation around

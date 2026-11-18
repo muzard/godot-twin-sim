@@ -107,7 +107,9 @@ public sealed record ShotFired(
 /// <param name="AgentId">The listener.</param>
 /// <param name="ShooterId">The shooter.</param>
 /// <param name="ShooterPosition">Where the shooter was.</param>
-public sealed record ShotHeard(double Time, string AgentId, string ShooterId, Vec2 ShooterPosition) : SimEvent(Time, AgentId);
+/// <param name="WeaponClass">The class of the weapon, recognised by the sound (backlog 0004 S5a2, WS3).</param>
+public sealed record ShotHeard(
+    double Time, string AgentId, string ShooterId, Vec2 ShooterPosition, WeaponClass WeaponClass = WeaponClass.Rifle) : SimEvent(Time, AgentId);
 
 /// <summary>An agent's health changed.</summary>
 /// <param name="Time">Simulated time.</param>
@@ -276,6 +278,15 @@ public sealed record OrderRepeated(double Time, string AgentId, string SquadId) 
 /// <param name="AgentId">The squad leader.</param>
 /// <param name="SquadId">The squad.</param>
 public sealed record EdgeDeployed(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
+/// <summary>The squad leader's enemy estimate changed (backlog 0004 S5a2; see <see cref="Squads.EnemyEstimate"/>).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The squad leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="Fighters">The number of distinct enemies the leader knows of.</param>
+/// <param name="HeavyMachineGun">True if the leader knows of a heavy machine gun.</param>
+public sealed record EnemyEstimateChanged(double Time, string AgentId, string SquadId, int Fighters, bool HeavyMachineGun)
+    : SimEvent(Time, AgentId);
 
 /// <summary>One squad in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The squad.</param>

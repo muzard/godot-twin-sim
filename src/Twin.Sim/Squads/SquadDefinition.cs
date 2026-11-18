@@ -84,6 +84,9 @@ public enum SquadFormation
 /// <param name="SecondLineDepthMeters">Members that do not fit the open line at the edge form a further line this much
 /// deeper in the forest (S2c). Provisional: compressing the line may replace it.</param>
 /// <param name="SectorWidthDegrees">Width of every observation sector (S2c). Provisional.</param>
+/// <param name="SuppressedDelayFactor">A suppressed member reacts, relays and takes over this many times slower (S5a2).</param>
+/// <param name="HeavilySuppressedDelayFactor">A heavily suppressed member reacts, relays and takes over this many times
+/// slower (S5a2).</param>
 public sealed record SquadDoctrine(
     double ExperiencedReactionSeconds = 1,
     double InexperiencedReactionSeconds = 3,
@@ -98,7 +101,9 @@ public sealed record SquadDoctrine(
     double EdgeInsetMeters = 5,
     double EdgeDeploymentSeconds = 60,
     double SecondLineDepthMeters = 10,
-    double SectorWidthDegrees = 90)
+    double SectorWidthDegrees = 90,
+    double SuppressedDelayFactor = 1.5,
+    double HeavilySuppressedDelayFactor = 3)
 {
     /// <summary>
     /// The accepted starting values: reaction 1 s / 3 s, relay 2 s, takeover 5 s; 10 m interval, 1 m minimum gap, leader
@@ -122,6 +127,10 @@ public sealed record SquadDoctrine(
     /// <summary>The reaction time to a command of a member with the given experience.</summary>
     public double ReactionSeconds(Experience experience) =>
         ActsDirectly(experience) ? ExperiencedReactionSeconds : InexperiencedReactionSeconds;
+
+    /// <summary>How many times slower a member reacts, relays and takes over in its suppression state (S5a2).</summary>
+    public double DelayFactor(bool suppressed, bool heavilySuppressed) =>
+        heavilySuppressed ? HeavilySuppressedDelayFactor : suppressed ? SuppressedDelayFactor : 1;
 }
 
 /// <summary>How a spot report is passed on (backlog 0004 S5a1). Hand signals come in a later ticket.</summary>

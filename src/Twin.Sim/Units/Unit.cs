@@ -256,6 +256,15 @@ public sealed class Unit
         ? rules.For(Posture).SpeedFactor * (Health == Health.Wounded ? rules.WoundedSpeedFactor : 1)
         : 1);
 
+    /// <summary>True once the unit has heard a heavy machine gun, or been told of one in a report (backlog 0004 S5a2).</summary>
+    internal bool KnowsHeavyMachineGun { get; set; }
+
+    /// <summary>
+    /// A squad posture command that reached the unit while it was in the drill under fire: taken when the drill ends
+    /// (backlog 0004 S5a2). Null if none.
+    /// </summary>
+    internal Posture? PostureAfterDrill { get; set; }
+
     /// <summary>Convenience: true when <see cref="Activity"/> is <see cref="UnitActivity.Idle"/>.</summary>
     public bool IsIdle => Activity == UnitActivity.Idle;
 }

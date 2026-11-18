@@ -288,7 +288,8 @@ public sealed class ScenarioDefinition
     {
         "rifle" => WeaponProfile.Rifle,
         "machineGun" => WeaponProfile.MachineGun,
-        _ => throw new InvalidDataException($"Unknown weapon '{name}'; use rifle or machineGun."),
+        "heavyMachineGun" => WeaponProfile.HeavyMachineGun,
+        _ => throw new InvalidDataException($"Unknown weapon '{name}'; use rifle, machineGun or heavyMachineGun."),
     };
 
     /// <summary>An enum value by its name in scenario.json, in camel case (<c>squadLeader</c>, <c>freeFire</c>).</summary>

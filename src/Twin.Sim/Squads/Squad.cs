@@ -1,3 +1,4 @@
+using Twin.Sim.Combat;
 using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
 
@@ -36,6 +37,13 @@ public sealed class Squad
         _teamLeaders = [.. teamLeaderIds];
         TeamTakeovers = new Takeover?[Teams.Count];
     }
+
+    /// <summary>
+    /// The squad leader's picture of the enemy (backlog 0004 S5a2): what the current leader knows, updated every step;
+    /// <see cref="EnemyEstimate.None"/> while the leader's place is empty, and not kept with
+    /// <see cref="ObservationRules.Off"/>.
+    /// </summary>
+    public EnemyEstimate EnemyEstimate { get; internal set; } = EnemyEstimate.None;
 
     /// <summary>The formation the squad's leader has commanded last (members change to it as the command reaches them).</summary>
     public SquadFormation Formation { get; internal set; }
@@ -238,5 +246,20 @@ public sealed class Squad
     /// <paramref name="ReporterId"/> speaks a report of <paramref name="EnemyId"/> at <paramref name="EnemyPosition"/> at
     /// <paramref name="Due"/>: its own spotting, or a relay toward the leader (<paramref name="IsRelay"/>).
     /// </summary>
-    internal sealed record SpotReport(string ReporterId, string EnemyId, Vec2 EnemyPosition, double Due, bool IsRelay);
+    internal sealed record SpotReport(
+        string ReporterId, string EnemyId, Vec2 EnemyPosition, double Due, bool IsRelay, WeaponClass? Class = null);
+}
+
+/// <summary>
+/// The squad leader's picture of the enemy (backlog 0004 S5a2), built only from what it knows: <paramref name="Fighters"/>,
+/// the number of distinct enemies it knows of (spotted itself, or from spot and contact reports), and
+/// <paramref name="HeavyMachineGun"/>, true once it has heard a heavy machine gun or been told of one. Enemies out of
+/// action are not taken off yet, and a strong fortification (the other reinforcing factor) has no model yet.
+/// </summary>
+/// <param name="Fighters">Distinct enemies the leader knows of.</param>
+/// <param name="HeavyMachineGun">True if the leader knows of a heavy machine gun.</param>
+public sealed record EnemyEstimate(int Fighters, bool HeavyMachineGun)
+{
+    /// <summary>Nothing known of the enemy.</summary>
+    public static EnemyEstimate None { get; } = new(0, false);
 }

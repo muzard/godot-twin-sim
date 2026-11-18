@@ -140,6 +140,11 @@ public static class EventLog
             case ShotHeard heard:
                 w.WriteString("shooter", heard.ShooterId);
                 WritePoint(w, "shooterPosition", heard.ShooterPosition);
+                if (heard.WeaponClass != WeaponClass.Rifle)
+                {
+                    w.WriteString("weaponClass", heard.WeaponClass.ToString());
+                }
+
                 break;
             case HealthChanged health:
                 w.WriteString("health", health.Health.ToString());
@@ -174,6 +179,11 @@ public static class EventLog
                 break;
             case EdgeDeployed deployed:
                 w.WriteString("squad", deployed.SquadId);
+                break;
+            case EnemyEstimateChanged estimate:
+                w.WriteString("squad", estimate.SquadId);
+                w.WriteNumber("fighters", estimate.Fighters);
+                w.WriteBoolean("heavyMachineGun", estimate.HeavyMachineGun);
                 break;
             case CommandIssued issued:
                 w.WriteString("squad", issued.SquadId);
@@ -255,7 +265,10 @@ public static class EventLog
             nameof(ShotFired) => new ShotFired(time, agent, Text(j, "target"), j.GetProperty("hit").GetBoolean(),
                 j.TryGetProperty("mode", out var mode) ? Enum.Parse<FireMode>(mode.GetString() ?? string.Empty) : FireMode.Aimed,
                 j.TryGetProperty("rounds", out var rounds) ? rounds.GetInt32() : 1),
-            nameof(ShotHeard) => new ShotHeard(time, agent, Text(j, "shooter"), Point2(j.GetProperty("shooterPosition"))),
+            nameof(ShotHeard) => new ShotHeard(time, agent, Text(j, "shooter"), Point2(j.GetProperty("shooterPosition")),
+                j.TryGetProperty("weaponClass", out var weaponClass) ? Enum.Parse<WeaponClass>(weaponClass.GetString() ?? string.Empty) : WeaponClass.Rifle),
+            nameof(EnemyEstimateChanged) => new EnemyEstimateChanged(time, agent, Text(j, "squad"), j.GetProperty("fighters").GetInt32(),
+                j.GetProperty("heavyMachineGun").GetBoolean()),
             nameof(HealthChanged) => new HealthChanged(time, agent, Enum.Parse<Health>(Text(j, "health"))),
             nameof(CasualtyOccurred) => new CasualtyOccurred(time, agent, Point2(j.GetProperty("position")), Enum.Parse<Health>(Text(j, "health"))),
             nameof(SuppressionStarted) => new SuppressionStarted(time, agent, j.TryGetProperty("heavy", out var heavy) && heavy.GetBoolean()),
