@@ -78,9 +78,28 @@ public static class SpecSquad
     public const string DeployAtForestEdgeCommand = "DeployAtForestEdge";
 
     /// <summary>
+    /// The squad's front (S5b) reaches this far beyond the bearings to the outermost enemies the leader knows of, on each
+    /// side. ⚠ Provisional ([PROPOSAL]).
+    /// </summary>
+    public const double FrontMarginDegrees = 10;
+
+    /// <summary>
+    /// Each team's share of the front (S5b) is widened by this fraction of its width (half on each side), so neighbouring
+    /// sectors overlap. ⚠ First version, to be reworked (backlog 0004, "S5b spec decisions").
+    /// </summary>
+    public const double TeamShareWidening = 0.5;
+
+    /// <summary>
+    /// The text of the leader's fire distribution command (S5b), as logged in
+    /// <see cref="Twin.Sim.Events.CommandIssued.Command"/>.
+    /// </summary>
+    public const string DirectSquadFireCommand = "DirectSquadFire";
+
+    /// <summary>
     /// The doctrine of backlog 0004: command delays (reaction 1 s / 3 s, relay 2 s, takeover 5 s), squad movement
-    /// (10 m interval, 1 m minimum gap, leader at 0.8 ×, halts beyond 20 m, moves on within 5 m, 64 m search window) and
-    /// the forest edge and observation (5 m inside the edge, 60 s limit, second line 10 m deeper, 90° sectors).
+    /// (10 m interval, 1 m minimum gap, leader at 0.8 ×, halts beyond 20 m, moves on within 5 m, 64 m search window), the
+    /// forest edge and observation (5 m inside the edge, 60 s limit, second line 10 m deeper, 90° sectors) and fire control
+    /// (front margin 10°, team shares widened by half).
     /// </summary>
     public static SquadDoctrine Doctrine { get; } = new(
         ExperiencedReactionSeconds: ExperiencedReactionSeconds,
@@ -96,7 +115,9 @@ public static class SpecSquad
         EdgeInsetMeters: EdgeInsetMeters,
         EdgeDeploymentSeconds: EdgeDeploymentSeconds,
         SecondLineDepthMeters: SecondLineDepthMeters,
-        SectorWidthDegrees: SectorWidthDegrees);
+        SectorWidthDegrees: SectorWidthDegrees,
+        FrontMarginDegrees: FrontMarginDegrees,
+        TeamShareWidening: TeamShareWidening);
 
     /// <summary>The wedge's step back and out between neighbours on an arm: the interval at 45° (7.07 m).</summary>
     public static double WedgeStepMeters => IntervalMeters / Math.Sqrt(2);
