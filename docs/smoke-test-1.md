@@ -99,7 +99,8 @@ scenario needs `--scenario <name>`. The camera starts framed on where the agents
 
 `./dev replay st1-combat` (add `--godot` to watch it) runs a built-in fire fight instead of a scenario file, because
 `scenario.json` holds one agent and no opponents: two fire teams of three under free fire with the backlog 0002 rifle,
-placed on the field of acceptance test K2 (`src/Twin.Headless/CombatDemo.cs`). It runs until one side has nobody in
+placed on the field of acceptance test K2 (`src/Twin.Headless/CombatDemo.cs`). Since backlog 0004 S5a1 fighters must
+spot an enemy before they fire, so each side starts watching toward the other (`Watch`). It runs until one side has nobody in
 action or nobody has fired for 120 s, and writes `replays/st1-combat.jsonl`.
 
 Choices made while implementing, beyond the tests:

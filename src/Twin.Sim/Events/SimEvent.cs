@@ -195,13 +195,62 @@ public sealed record LeaderChanged(double Time, string AgentId, string SquadId) 
 /// <param name="Team">The team.</param>
 public sealed record TeamLeaderChanged(double Time, string AgentId, string SquadId, string Team) : SimEvent(Time, AgentId);
 
+/// <summary>An agent spotted an enemy (backlog 0004 S5a1): from now on it knows of it and may fire at it.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The observer.</param>
+/// <param name="EnemyId">The enemy.</param>
+/// <param name="EnemyPosition">Where the enemy is.</param>
+public sealed record EnemySpotted(double Time, string AgentId, string EnemyId, Vec2 EnemyPosition) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// A squad member spoke a spot report (backlog 0004 S5a1): its own spotting, or a relay toward its leader. Squad mates in
+/// range who did not know of the enemy log <see cref="SpotReceived"/>.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The member speaking.</param>
+/// <param name="EnemyId">The enemy.</param>
+/// <param name="EnemyPosition">Where the enemy was spotted.</param>
+/// <param name="Method">How the report is passed on.</param>
+public sealed record SpotReported(double Time, string AgentId, string EnemyId, Vec2 EnemyPosition, ReportMethod Method)
+    : SimEvent(Time, AgentId);
+
+/// <summary>A squad member learned of an enemy from a squad mate's report, or from its leader when the squad moved on.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The member who learned of it.</param>
+/// <param name="ReporterId">Who told it.</param>
+/// <param name="EnemyId">The enemy.</param>
+/// <param name="EnemyPosition">Where the enemy was reported.</param>
+public sealed record SpotReceived(double Time, string AgentId, string ReporterId, string EnemyId, Vec2 EnemyPosition)
+    : SimEvent(Time, AgentId);
+
+/// <summary>A squad halted because its leader learned of an enemy (backlog 0004 S5a1).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="EnemyId">The enemy that halted it.</param>
+public sealed record SquadHalted(double Time, string AgentId, string SquadId, string EnemyId) : SimEvent(Time, AgentId);
+
+/// <summary>A halted squad moved on on its leader's <see cref="Orders.ResumeMovement"/> order (backlog 0004 S5a1).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record SquadResumed(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
 /// <summary>One squad in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The squad.</param>
 /// <param name="LeaderId">Its leader, or null while the place is empty.</param>
 /// <param name="TeamLeaderIds">Each team's leader in team order, null while the place is empty.</param>
 /// <param name="Formation">The formation its leader commanded last.</param>
+/// <param name="Halted">True while it is halted on a spotted enemy (backlog 0004 S5a1).</param>
 public sealed record SquadSnapshot(
-    string Id, string? LeaderId, IReadOnlyList<string?> TeamLeaderIds, SquadFormation Formation = SquadFormation.File);
+    string Id, string? LeaderId, IReadOnlyList<string?> TeamLeaderIds, SquadFormation Formation = SquadFormation.File,
+    bool Halted = false);
+
+/// <summary>An enemy an agent knows of, in a <see cref="WorldSnapshot"/> (backlog 0004 S5a1).</summary>
+/// <param name="AgentId">The agent.</param>
+/// <param name="EnemyId">The enemy.</param>
+/// <param name="Position">Its last known position: where it was spotted or reported.</param>
+public sealed record KnownEnemySnapshot(string AgentId, string EnemyId, Vec2 Position);
 
 /// <summary>One agent in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The agent.</param>
@@ -225,4 +274,7 @@ public sealed record WorldSnapshot(double TimeSeconds, IReadOnlyList<AgentSnapsh
 {
     /// <summary>Every squad and who leads it and its teams, ordered by id (backlog 0004).</summary>
     public IReadOnlyList<SquadSnapshot> Squads { get; init; } = [];
+
+    /// <summary>Every enemy each agent knows of, ordered by agent and then enemy (backlog 0004 S5a1).</summary>
+    public IReadOnlyList<KnownEnemySnapshot> KnownEnemies { get; init; } = [];
 }

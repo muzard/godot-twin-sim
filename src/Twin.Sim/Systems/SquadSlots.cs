@@ -71,6 +71,28 @@ internal static class SquadSlots
     }
 
     /// <summary>
+    /// The squad's direction of travel (backlog 0004 S5a1): the direction of the leader's path where the leader is, ahead
+    /// toward where it is going, or along the path it walked last when it has stopped. Null before the squad's first
+    /// movement order, while it has no leader, and while the path gives no direction.
+    /// </summary>
+    public static Vec2? TravelDirection(Simulation simulation, Squad squad)
+    {
+        if (!squad.MovementStarted || squad.LeaderId is not { } leaderId)
+        {
+            return null;
+        }
+
+        var path = LeaderPath(squad, simulation.GetUnit(leaderId), aheadMeters: 0, out var leaderAt);
+        if (path.Count < 2)
+        {
+            return null;
+        }
+
+        PointAt(path, leaderAt, out var direction);
+        return direction;
+    }
+
+    /// <summary>
     /// The formation's slots after compression to the corridor's inner zone; a file if the lateral gap between neighbours
     /// would fall below the minimum.
     /// </summary>

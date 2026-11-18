@@ -129,6 +129,13 @@ public sealed class Unit
     public int RoundsLeft { get; internal set; }
 
     /// <summary>
+    /// Where the unit watches (backlog 0004 S5a1), unit length: toward the nearest attacker in the drill under fire,
+    /// toward the last known position of an enemy it has just learned of, its formation place's sector while it follows a
+    /// squad, otherwise its direction of movement or the direction of its last <see cref="Watch"/> order. North at first.
+    /// </summary>
+    public Vec2 WatchDirection { get; internal set; } = new(0, 1);
+
+    /// <summary>
     /// How the unit moves on terrain, or null for a unit that moves at <see cref="MaxSpeedMps"/> everywhere.
     /// A plain <see cref="MoveTo"/> ignores the profile and moves straight at <see cref="MaxSpeedMps"/>; use
     /// <see cref="MoveThroughCorridor"/> for terrain-aware movement.
@@ -175,6 +182,30 @@ public sealed class Unit
 
     /// <summary>The drill under fire: when it started, its snap shots, its suspended order and where it is heading.</summary>
     internal ContactDrill? Drill { get; set; }
+
+    /// <summary>Spotting progress toward each enemy in sight but not yet spotted, 0..1 (backlog 0004 S5a1).</summary>
+    internal SortedDictionary<string, double> SpotProgress { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Enemies the unit has spotted itself: only these does it fire at.</summary>
+    internal SortedSet<string> Spotted { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Enemies the unit knows of, spotted or reported, with their last known position.</summary>
+    internal SortedDictionary<string, Vec2> KnownEnemies { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Enemies the unit has reported or relayed: a member reports an enemy once.</summary>
+    internal SortedSet<string> Reported { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The last known position of the enemy the unit learned of last; it watches there until it moves on.</summary>
+    internal Vec2? WatchTarget { get; set; }
+
+    /// <summary>True from a <see cref="Watch"/> order until the next order: the unit keeps that direction.</summary>
+    internal bool HoldsWatch { get; set; }
+
+    /// <summary>True while a squad member that knows of an enemy stands still, crouching, until the squad moves on.</summary>
+    internal bool IsAlerted { get; set; }
+
+    /// <summary>The posture the unit wanted before it was alerted; taken back when its squad moves on.</summary>
+    internal Posture? PostureBeforeAlert { get; set; }
 
     /// <summary>The activity to return to when a combat state (suppressed, pinned, changing posture) ends.</summary>
     internal UnitActivity ActivityBeforeCombat { get; set; }

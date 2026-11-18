@@ -37,6 +37,21 @@ public sealed class Squad
     /// <summary>The formation the squad's leader has commanded last (members change to it as the command reaches them).</summary>
     public SquadFormation Formation { get; internal set; }
 
+    /// <summary>
+    /// True from the moment the leader learns of an enemy it did not know of until it is ordered
+    /// <see cref="ResumeMovement"/> (backlog 0004 S5a1): the squad stands still, crouching, its movement order suspended.
+    /// </summary>
+    public bool IsHalted { get; internal set; }
+
+    /// <summary>The leader's movement order suspended by the halt; taken up again on <see cref="ResumeMovement"/>.</summary>
+    internal Order? SuspendedOrder { get; set; }
+
+    /// <summary>Enemies the squad has halted for, or moved on knowing of: they do not halt it again.</summary>
+    internal SortedSet<string> HaltedFor { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Spot reports and relays about to be spoken, in the order they were scheduled.</summary>
+    internal List<SpotReport> PendingReports { get; } = [];
+
     /// <summary>The definition the squad was formed from.</summary>
     internal SquadDefinition Definition { get; }
 
@@ -131,4 +146,10 @@ public sealed class Squad
     /// members it passes the command on to (<paramref name="RelayTo"/>).
     /// </summary>
     internal sealed record Delivery(string UnitId, int CommandId, Order Command, double Due, IReadOnlyList<string> RelayTo);
+
+    /// <summary>
+    /// <paramref name="ReporterId"/> speaks a report of <paramref name="EnemyId"/> at <paramref name="EnemyPosition"/> at
+    /// <paramref name="Due"/>: its own spotting, or a relay toward the leader (<paramref name="IsRelay"/>).
+    /// </summary>
+    internal sealed record SpotReport(string ReporterId, string EnemyId, Vec2 EnemyPosition, double Due, bool IsRelay);
 }

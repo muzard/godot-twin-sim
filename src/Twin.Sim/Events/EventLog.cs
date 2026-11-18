@@ -168,6 +168,27 @@ public static class EventLog
                 w.WriteString("attacker", report.AttackerId);
                 WritePoint(w, "attackerPosition", report.AttackerPosition);
                 break;
+            case EnemySpotted spotted:
+                w.WriteString("enemy", spotted.EnemyId);
+                WritePoint(w, "enemyPosition", spotted.EnemyPosition);
+                break;
+            case SpotReported spot:
+                w.WriteString("enemy", spot.EnemyId);
+                WritePoint(w, "enemyPosition", spot.EnemyPosition);
+                w.WriteString("method", spot.Method.ToString());
+                break;
+            case SpotReceived received:
+                w.WriteString("reporter", received.ReporterId);
+                w.WriteString("enemy", received.EnemyId);
+                WritePoint(w, "enemyPosition", received.EnemyPosition);
+                break;
+            case SquadHalted halted:
+                w.WriteString("squad", halted.SquadId);
+                w.WriteString("enemy", halted.EnemyId);
+                break;
+            case SquadResumed resumed:
+                w.WriteString("squad", resumed.SquadId);
+                break;
             default:
                 throw new ArgumentException($"Unknown event type {e.GetType().Name}.", nameof(e));
         }
@@ -215,6 +236,12 @@ public static class EventLog
             nameof(TeamLeaderChanged) => new TeamLeaderChanged(time, agent, Text(j, "squad"), Text(j, "team")),
             nameof(ContactDrillStageChanged) => new ContactDrillStageChanged(time, agent, Enum.Parse<ContactDrillStage>(Text(j, "stage"))),
             nameof(ContactReported) => new ContactReported(time, agent, Text(j, "attacker"), Point2(j.GetProperty("attackerPosition"))),
+            nameof(EnemySpotted) => new EnemySpotted(time, agent, Text(j, "enemy"), Point2(j.GetProperty("enemyPosition"))),
+            nameof(SpotReported) => new SpotReported(time, agent, Text(j, "enemy"), Point2(j.GetProperty("enemyPosition")),
+                Enum.Parse<ReportMethod>(Text(j, "method"))),
+            nameof(SpotReceived) => new SpotReceived(time, agent, Text(j, "reporter"), Text(j, "enemy"), Point2(j.GetProperty("enemyPosition"))),
+            nameof(SquadHalted) => new SquadHalted(time, agent, Text(j, "squad"), Text(j, "enemy")),
+            nameof(SquadResumed) => new SquadResumed(time, agent, Text(j, "squad")),
             _ => throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Unknown event type '{type}'.")),
         };
     }
@@ -282,6 +309,7 @@ public static class EventReplay
         var agents = new SortedDictionary<string, AgentSnapshot>(StringComparer.Ordinal);
         var squads = new SortedDictionary<string, SquadSnapshot>(StringComparer.Ordinal);
         var teams = new SortedDictionary<string, List<string>>(StringComparer.Ordinal);
+        var known = new SortedDictionary<string, SortedDictionary<string, Vec2>>(StringComparer.Ordinal);
         foreach (var e in events)
         {
             if (e.Time > timeSeconds + TimeTolerance)
@@ -292,6 +320,12 @@ public static class EventReplay
             ApplySquadEvent(squads, teams, e);
             switch (e)
             {
+                case EnemySpotted spotted:
+                    Know(known, e.AgentId, spotted.EnemyId, spotted.EnemyPosition);
+                    break;
+                case SpotReceived received:
+                    Know(known, e.AgentId, received.EnemyId, received.EnemyPosition);
+                    break;
                 case AgentPlaced placed:
                     agents[e.AgentId] = new AgentSnapshot(e.AgentId, placed.Position, UnitActivity.Idle);
                     break;
@@ -328,7 +362,22 @@ public static class EventReplay
             }
         }
 
-        return new WorldSnapshot(timeSeconds, agents.Values.ToList()) { Squads = squads.Values.ToList() };
+        return new WorldSnapshot(timeSeconds, agents.Values.ToList())
+        {
+            Squads = squads.Values.ToList(),
+            KnownEnemies = known.SelectMany(a => a.Value.Select(k => new KnownEnemySnapshot(a.Key, k.Key, k.Value))).ToList(),
+        };
+    }
+
+    private static void Know(SortedDictionary<string, SortedDictionary<string, Vec2>> known, string agentId, string enemyId, Vec2 position)
+    {
+        if (!known.TryGetValue(agentId, out var enemies))
+        {
+            enemies = new SortedDictionary<string, Vec2>(StringComparer.Ordinal);
+            known.Add(agentId, enemies);
+        }
+
+        enemies[enemyId] = position;
     }
 
     private static void ApplySquadEvent(
@@ -342,6 +391,12 @@ public static class EventReplay
                 break;
             case FormationChanged formation when squads.TryGetValue(formation.SquadId, out var squad):
                 squads[squad.Id] = squad with { Formation = formation.Formation };
+                break;
+            case SquadHalted halted when squads.TryGetValue(halted.SquadId, out var squad):
+                squads[squad.Id] = squad with { Halted = true };
+                break;
+            case SquadResumed resumed when squads.TryGetValue(resumed.SquadId, out var squad):
+                squads[squad.Id] = squad with { Halted = false };
                 break;
             case LeaderChanged leader when squads.TryGetValue(leader.SquadId, out var squad):
                 squads[squad.Id] = squad with { LeaderId = leader.AgentId };

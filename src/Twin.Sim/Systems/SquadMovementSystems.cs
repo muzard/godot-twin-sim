@@ -110,7 +110,8 @@ public sealed class SquadCohesionSystem : ISimSystem
 /// speed, in a straight line when it can, otherwise by a path search in a window of
 /// <see cref="SquadDoctrine.LocalSearchMeters"/> around itself. It never leaves the corridor's outer limit or crosses a
 /// cliff. Members that cannot move (pinned, suppressed, changing posture, out of action) or are in the drill under fire
-/// stay. Runs before the leader moves: members head for their slots around where the leader is at the start of the step,
+/// stay, and so do members that know of an enemy and the whole squad while it is halted on one (S5a1). Runs before the
+/// leader moves: members head for their slots around where the leader is at the start of the step,
 /// and the leader's trail is recorded.
 /// </summary>
 public sealed class SquadFollowSystem : ISimSystem
@@ -142,7 +143,7 @@ public sealed class SquadFollowSystem : ISimSystem
                 RecordTrail(squad, leader.Position.Xy, keep);
             }
 
-            if (SquadSlots.Compute(simulation, squad) is not { } slots)
+            if (squad.IsHalted || SquadSlots.Compute(simulation, squad) is not { } slots)
             {
                 Hold(simulation, squad, leaderId);
                 continue;
@@ -203,7 +204,7 @@ public sealed class SquadFollowSystem : ISimSystem
 
         var previous = member.Position;
         var position = previous.Xy;
-        if (position.DistanceTo(slot) <= 1e-9)
+        if (member.IsAlerted || position.DistanceTo(slot) <= 1e-9)
         {
             member.Velocity = Vec3.Zero;
             CombatQueries.SetActivity(member, UnitActivity.Idle);

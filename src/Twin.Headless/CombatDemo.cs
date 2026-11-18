@@ -3,6 +3,7 @@ using Twin.Sim.Combat;
 using Twin.Sim.Events;
 using Twin.Sim.Geometry;
 using Twin.Sim.Movement;
+using Twin.Sim.Orders;
 using Twin.Sim.Scenarios;
 using Twin.Sim.World;
 
@@ -41,13 +42,18 @@ internal static class CombatDemo
         var map = ScenarioDefinition.Load(MapDirectory(scenariosRoot));
         var config = new SimulationConfig(map.TickRateHz, map.Seed) { Combat = CombatRules.Default with { Doctrine = map.Doctrine } };
         var simulation = new Simulation(map.World.World, config);
-        foreach (var team in Teams)
+        var leaders = Teams.Select(t => map.World.Origin.ToLocal(new EtrsPoint(t.Easting, t.Northing))).ToList();
+        for (var t = 0; t < Teams.Length; t++)
         {
-            var leader = map.World.Origin.ToLocal(new EtrsPoint(team.Easting, team.Northing));
+            var team = Teams[t];
+            var enemy = leaders[(t + 1) % leaders.Count];
             for (var i = 0; i < Spread.Length; i++)
             {
-                simulation.AddUnit($"{team.Prefix}-{i + 1}", leader + Spread[i], MovementProfile.Infantry,
+                var id = $"{team.Prefix}-{i + 1}";
+                var at = leaders[t] + Spread[i];
+                simulation.AddUnit(id, at, MovementProfile.Infantry,
                     new Combatant(team.Side, RulesOfEngagement.FreeFire, WeaponProfile.Rifle, UnitId: team.Prefix));
+                simulation.Issue(id, new Watch(enemy - at)); // each side watches toward the other (backlog 0004 S5a1)
             }
         }
 

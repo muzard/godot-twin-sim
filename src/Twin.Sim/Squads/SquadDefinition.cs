@@ -96,6 +96,15 @@ public sealed record SquadDoctrine(
     /// </summary>
     public static SquadDoctrine Default { get; } = new();
 
+    /// <summary>Where each formation place watches while the squad moves or rests (backlog 0004 S5a1).</summary>
+    public WatchSectors WatchSectors { get; init; } = WatchSectors.Default;
+
+    /// <summary>
+    /// A spoken spot report reaches squad mates within this distance (backlog 0004 S5a1). ⚠ A placeholder: how far a
+    /// voice carries must be modelled better later (terrain, background noise, wind, loudness).
+    /// </summary>
+    public double VoiceRangeMeters { get; init; } = 30;
+
     /// <summary>
     /// True if a fighter with this experience acts on the squad leader's command directly; otherwise it waits for its
     /// team leader to pass the command on.
@@ -105,4 +114,36 @@ public sealed record SquadDoctrine(
     /// <summary>The reaction time to a command of a member with the given experience.</summary>
     public double ReactionSeconds(Experience experience) =>
         ActsDirectly(experience) ? ExperiencedReactionSeconds : InexperiencedReactionSeconds;
+}
+
+/// <summary>
+/// Each formation place's watch direction (backlog 0004 S5a1), in degrees to the right of the squad's direction of
+/// travel, in formation order (front to back, see <see cref="FormationSlots"/>). A place beyond a table watches ahead.
+/// </summary>
+/// <param name="FileDegrees">The file's places.</param>
+/// <param name="WedgeDegrees">The wedge's places.</param>
+public sealed record WatchSectors(IReadOnlyList<double> FileDegrees, IReadOnlyList<double> WedgeDegrees)
+{
+    /// <summary>
+    /// The starting tables for the nine-member reference squad: in the file the first member and the leader ahead, the
+    /// rest alternately right and left, the last one back; in the wedge the apex and the leader ahead, the arms out to
+    /// their side, the rear corners back left and back right.
+    /// </summary>
+    public static WatchSectors Default { get; } = new(
+        FileDegrees: [0, 90, -90, 0, 90, -90, 90, -90, 180],
+        WedgeDegrees: [0, -45, 45, 0, 90, -90, 90, -135, 135]);
+
+    /// <summary>The watch angle of the place <paramref name="place"/> (0 = front) in <paramref name="formation"/>.</summary>
+    public double DegreesAt(SquadFormation formation, int place)
+    {
+        var table = formation == SquadFormation.Wedge ? WedgeDegrees : FileDegrees;
+        return place >= 0 && place < table.Count ? table[place] : 0;
+    }
+}
+
+/// <summary>How a spot report is passed on (backlog 0004 S5a1). Hand signals come in a later ticket.</summary>
+public enum ReportMethod
+{
+    /// <summary>Spoken: heard by squad mates within the voice range.</summary>
+    Voice,
 }
