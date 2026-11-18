@@ -112,6 +112,10 @@ public sealed class UnitAssertions
     public UnitAssertions BeIn(Posture expected) =>
         Check(_unit.Posture == expected, $"to be {expected}");
 
+    /// <summary>The unit's activity is <paramref name="expected"/> (for example waiting for its squad, backlog 0004).</summary>
+    public UnitAssertions HaveActivity(UnitActivity expected) =>
+        Check(_unit.Activity == expected, $"to have activity {expected}");
+
     internal static string DescribeUnit(Unit u) =>
         $"  unit '{u.Id}': position {u.Position}, velocity {u.Velocity}, activity {u.Activity}, " +
         $"health {u.Health}, posture {u.Posture}, pressure {u.SuppressionPressure:0.###}, drill {u.DrillStage}, " +
