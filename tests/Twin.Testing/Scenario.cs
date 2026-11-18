@@ -117,6 +117,20 @@ public sealed class Scenario
     public static Scenario ForSquad() => ForCombat().WithSquadDoctrine(SpecSquad.Doctrine);
 
     /// <summary>
+    /// Starts a spotting scenario (backlog 0004 S5a1): <see cref="ForCombat"/> with <see cref="SpecSpotting.Rules"/>, so
+    /// seeing an enemy takes time and depends on where the observer watches. Turn an observer with the
+    /// <see cref="Twin.Sim.Orders.Watch"/> order.
+    /// </summary>
+    public static Scenario ForSpotting() => ForCombat().WithCombatRules(SpecSpotting.Rules);
+
+    /// <summary>
+    /// Starts a squad spotting scenario (backlog 0004 S5a1): <see cref="ForSquad"/> with <see cref="SpecSpotting.Rules"/>
+    /// and <see cref="SpecSpotting.Doctrine"/> (watch sectors, voice range).
+    /// </summary>
+    public static Scenario ForSquadSpotting() =>
+        ForSquad().WithCombatRules(SpecSpotting.Rules).WithSquadDoctrine(SpecSpotting.Doctrine);
+
+    /// <summary>
     /// Places every member of <paramref name="squad"/> as a fighter (as <see cref="WithFighter"/>) with its experience,
     /// and forms the squad from them when the scenario is built. Members stand in a row, <see cref="SquadSpacingMeters"/>
     /// apart, eastward from <paramref name="at"/> in member order. They hold fire unless <paramref name="rules"/> says

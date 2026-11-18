@@ -1,7 +1,8 @@
 # 0004. Squad: leadership, formations and drills under fire (Smoke test II)
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
-(2026-11-17); S2a specified and implemented (2026-11-18); S2b–S6 have no tests yet. Drafted as 0003 in parallel with
+(2026-11-17); S2a specified and implemented (2026-11-18); S5a1 (spotting) specified and implemented
+(2026-11-18); S2b, S2c, S5a2–S6 have no tests yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -32,7 +33,8 @@ otherwise. Decided with the product owner on 2026-11-18:
 | **S2a** | Squad movement: only the RJ is ordered; file and wedge slots along the RJ's route; members move straight or by local A*; cohesion (leader at 0.8 ×, waits for stragglers); arrival in slots; `SetSquadFormation` through the chain of command; a member ordered directly leaves the squad's movement until `Rejoin` | SM1, SM2, SM8, SM9, FO1–FO3 for file and wedge |
 | **S2b** | Hard boundaries: the RJ asks, the squad halts, a permit covers the formation, a member at the boundary waits; forest-edge deployment in an open line | SM3–SM7 |
 | **S2c** | scenario.json `squad` section (and the enemies an ambush needs); a squad crossing st1, timed; the Godot replay marks the squad and its leader | SM10 |
-| **S5a** | Contact reaches the RJ up the chain (relay delays, slowed by suppression); the RJ's enemy estimate (distinct enemies, heavy machine gun by the sound of a heard shot); the squad's movement is suspended under contact, not lost; suppression slows commands and takeover; squad commands and 0003's drill no longer conflict (the two S1 limitations) | UF1, UF5–UF7, WS3 |
+| **S5a1** | Spotting: spotting time, watch sectors in file and wedge, the spot report (voice range, relay to the RJ), the squad halts and crouches when the RJ knows; free fire only at spotted enemies (decision 19) | SP1–SP12 |
+| **S5a** (S5a2) | Contact reaches the RJ up the chain (relay delays, slowed by suppression); the RJ's enemy estimate (distinct enemies, heavy machine gun by the sound of a heard shot); the squad's movement is suspended under contact, not lost; suppression slows commands and takeover; squad commands and 0003's drill no longer conflict (the two S1 limitations) | UF1, UF5–UF7, WS3 |
 | **S5b** | The RJ directs fire: commands members or teams to fire at reported enemies (fire control) | new criteria |
 | **CC** | Casualty care (0002's foundation): tell the dead from the badly wounded; the dead are left, the wounded are carried or helped by squad mates (`GivingAid`), which slows the squad and takes fighters out of the fight; the RJ reports casualties to the platoon leader | new criteria; replaces S2a's provisional "out of action halts the squad" |
 | **S6a** | Bounding forward: one team moves a bound while two fire; the RJ advances on its own against a weak enemy (≤ 3 fighters, no reinforcing factor); a team that cannot move reports `BoundImpossible` and the next one bounds; an order to the RJ overrides its decision; afterwards the squad re-forms and resumes the corridor | UF3, UF8, UF10, BO1–BO5 |
@@ -539,6 +541,176 @@ and `SquadMovementAssertions` (`SquadSettled`, `RunUntilSquadSettled`, `ShouldBe
 - UF9 The RJ changes to `BreakContact` after 2 casualties or 120 s of fire, also when the enemy is weak.
 - UF10 An order to the RJ overrides its own drill decision.
 
+#### S5a split (product owner, 2026-11-18)
+S5a is delivered in two parts. **S5a1: spotting** (observation, watch sectors, the spot report, the squad halts),
+below. **S5a2:** the rest of S5a (UF1, UF5–UF7, WS3: contact by fire up the chain, the enemy estimate, suppression
+slows command, the drill conflicts), built on S5a1's reports.
+
+#### S5a1 spec decisions (draft, 2026-11-18; values marked [PROPOSAL] are for review)
+**Observation (spotting).** Seeing is no longer instant. An observer spots an enemy after watching it continuously
+for the spotting time
+
+`t_spot = t_base(experience) · (1 + d / d_ref) · A(angle) · (1 / SizeFactor(target posture)) / T`
+
+- `t_base` (product owner, 2026-11-18): `Conscript` 1.5 s, `Regular` 1.25 s, `SpecialForces` 1 s; `d_ref` = 100 m
+  **[PROPOSAL]**. A regular soldier spots a standing enemy in the open straight ahead at 100 m in 2.5 s, at 300 m in
+  5 s.
+- `A(angle)`, the angle between the observer's watch direction and the enemy (product owner): `1` within the focus
+  cone (straight ahead), `3` elsewhere in the field of view, never outside it. Cone and field of view are data
+  (`ObservationRules`) so night-vision devices and the like can change them later. Focus half-angle 15°, field of view
+  half-angle 90° **[PROPOSAL]**.
+- `SizeFactor` is the 0002 posture size (1 / 0.7 / 0.4): a crouching enemy takes 1.43 ×, a prone one 2.5 × as long.
+- `T` is the 0002 forest transmission; below `VisibleTransmission` there is nothing to see (as now).
+- Progress builds up each step as `dt / t_spot` under the current conditions and the enemy is spotted at 1. It
+  restarts from zero when the enemy leaves the line of sight or the field of view.
+- **A muzzle flash in the field of view** spots its shooter at once (0003: a target seen only by its flash gets snap
+  shots). **Sounds are heard all round** (`ShotHeard`, unchanged); hearing alone spots nobody.
+- Later tickets (product owner): *movement reveals* (a moving enemy is spotted sooner), darkness, night vision.
+
+**Watch direction.** Every combatant has one. A squad member following its squad watches its slot's sector, an angle
+relative to the squad's direction of travel (positive to the right) **[PROPOSAL]**:
+
+| Formation | pj | k1 | k2 | rj | j1 | j2 | vj | kk | t1 |
+|---|---|---|---|---|---|---|---|---|---|
+| Wedge | 0° | −45° | +45° | 0° | +90° | −90° | +90° | −135° | +135° |
+| File | 0° | +90° | −90° | 0° | +90° | −90° | +90° | −90° | 180° |
+
+In general (any squad): the first member and the RJ watch ahead, the last member watches back (wedge: the last two
+members back left and back right); the rest watch out to their arm's side in the wedge and alternately right and left
+in the file. The table is data in `SquadDoctrine`. An agent outside a squad watches its direction of movement (the
+last one when it stops; set in the scenario before it moves). An agent in 0003's drill watches its nearest attacker. An
+agent that learns of an enemy (by spotting it or from a report) watches its last known position.
+
+**Spot report.** A member that spots an enemy reports it after its command reaction delay (`t_react`: 1 s experienced,
+3 s inexperienced, S1): `SpotReported(spotter, enemy, position)`. For now the report is spoken: every squad mate within
+voice range (30 m **[PROPOSAL]**) learns of the enemy and its position at once (`SpotReceived`). Hand signals (silent,
+need a line of sight) come in a later ticket (product owner); the report's method is a field so it can be added.
+If the RJ did not hear it, the report is passed toward the RJ: of the members who know of the enemy, the one nearest
+the RJ repeats it after `t_relay` (2 s), again and again until the RJ knows, so a broken chain is tried again (review
+decision, 2026-11-18). A member reports an enemy it spotted once, and never one it already knew of; relays repeat it.
+
+⚠ **Voice range is a placeholder** (product owner, 2026-11-18): one fixed range is not enough and must be modelled
+better in a later ticket. How far a shout carries depends at least on the terrain and vegetation between (forest,
+ground in the way), background noise (weapon fire nearby drowns it), wind, and how loud the speaker chooses to be
+(a low voice to stay hidden versus a shout under fire). Keep the range behind one query so that model can replace it.
+
+**The squad halts.** A member stops and crouches as soon as it knows of an enemy (it spotted it or heard of it). When
+the RJ knows of one, the whole squad halts at once, without a command delay (product owner), and every member
+crouches (product owner). The squad's movement order is suspended, not lost: `ResumeMovement` **[PROPOSAL: name]** to
+the RJ resumes it in formation, and members take back their posture from before the halt.
+
+**Fire.** A fighter fires aimed shots only at an enemy it has spotted itself; at one it has not spotted it can only
+fire toward the direction (product owner). Direction fire (area fire at a heard or reported position) is a later
+ticket, as in 0003, so in S5a1: free fire engages only spotted enemies, and an attacker seen only by its muzzle flash
+gets snap shots as in 0003.
+
+**0002 and 0003 tests.** They test firing, not spotting, so they keep instant all-round sight: `SpecShooting.Rules`
+pins `ObservationRules.Off` (no spotting time, no field of view). New spotting tests use `SpecSpotting`. (Agreed by
+the product owner with the S5a1 tests, 2026-11-18.)
+
+#### S5a1 acceptance criteria (draft)
+- SP1 A regular fighter spots a standing enemy in the open straight ahead at 100 m after `t_spot` (2.5 s), not before
+  and at most one tick after; `EnemySpotted(observer, enemy, position)` is logged.
+- SP2 The same enemy elsewhere in the field of view is spotted after 3 × as long; behind the observer it is never
+  spotted, however long it stays.
+- SP3 A crouching or prone enemy, more distance or forest between take as much longer as the formula says; a broken
+  line of sight starts the time again.
+- SP4 A conscript takes longer than a regular soldier, special forces less.
+- SP5 Changed observation rules (a wider focus cone, as with night vision) change the spotting time.
+- SP6 A muzzle flash in the field of view spots its shooter at once; a shot from behind is heard but spots no one.
+- SP7 In a wedge an enemy on the right flank is spotted by a member of the right arm and not by the left arm; in a
+  file, by the members watching right.
+- SP8 The spotter stops and crouches at once and reports after its reaction delay; squad mates within 30 m learn of
+  the enemy then, those farther away do not.
+- SP9 An RJ out of the spotter's voice range learns of the enemy through the nearest hearer, `t_relay` later.
+- SP10 When the RJ knows of an enemy the whole squad halts at once and every member crouches; `ResumeMovement`
+  resumes the squad's movement order in formation.
+- SP11 A free-fire fighter does not fire at an enemy in sight that it has not spotted, and fires once it has.
+- SP12 Runs with the same seed give byte-identical logs; known enemies and the halt are rebuilt from the log.
+
+#### S5a1 details settled while writing the tests (2026-11-18, for review)
+- **Distance** in `t_spot` is from the observer's eye to the enemy's aim point, as in the hit model. Exactly on the
+  field of view's edge counts as outside.
+- **Turning an observer:** a new order `Watch(direction)` ("tähystä suuntaan"): the agent stops, as with `Stop`, and
+  watches that direction. Tests need it to aim an observer; it is also an operator order. A zero direction is
+  rejected. **[PROPOSAL]**
+- **A settled squad** keeps watching its sectors relative to its last direction of travel. Places beyond the sector
+  table watch ahead.
+- **The spotter stops and crouches when it spots**, before the RJ knows; so does any member when it hears a report.
+- **The squad halts when the RJ learns of an enemy it did not know of,** so a known enemy does not halt it again.
+  `ResumeMovement` to the RJ (rejected for anyone else) ends the halt, logs `SquadResumed`, and resumes the
+  suspended movement order in formation; members take back the posture they had before the halt and learn of the
+  enemies the RJ knows (so seeing them again halts no one). **[PROPOSAL]**
+- **A known enemy's position** is the position spotted or reported; S5a1 does not track it after that.
+- **0002 and 0003 tests** keep `ObservationRules.Off` through `SpecShooting.Rules`: a fighter knows every enemy it can
+  see, all round, and nothing is spotted, reported or halted. Checked: with the new API stubbed, all 366 existing tests
+  still pass.
+- **Layouts:** the squad spotting tests use a 12 m interval so no squad mate stands exactly 30 m from another (with
+  10 m the wedge's apex is exactly 30 m from its third-rank corners). The hidden enemy lies prone behind a 0.6 m
+  mound and stands up when the test wants it seen.
+- **A `FireAt` order's target must be spotted first** (implemented so, 2026-11-18): the rule "aimed fire only at an
+  enemy it has spotted itself" covers ordered fire too. The tests do not depend on it (the ordered shooter is turned to
+  its target first); revisit in S5b (fire control) if ordered fire should work differently.
+- **Watching a known enemy ends when the agent moves on** (implemented, 2026-11-18): an agent that learns of an enemy
+  watches its last known position while it stands still; moving again turns it back to its direction of movement or
+  its sector.
+- **Limitation:** a halted corridor order is planned again on `ResumeMovement`, so permits already granted are lost.
+
+#### S5a1 review decisions (product owner, 2026-11-18)
+- **A report that does not reach the RJ is repeated** every `t_relay` by the member nearest the RJ of those who know of
+  the enemy, until the RJ knows (a relay out of action, nobody nearer the RJ, or the RJ's place empty during a
+  takeover).
+- **The squad halts whenever its leader knows of an enemy it has not halted for**, also when a successor who already
+  knew of it takes command.
+- **A new movement order to the RJ during a halt ends the halt** like `ResumeMovement`, with the new order instead of
+  the suspended one; the suspended order is dropped.
+- **Moving on keeps the movement posture:** the squad moves on in the posture it moved in before the halt (standing, or
+  crawling if it was ordered prone on the move), whatever posture was commanded during the halt.
+- **A squad leader's `Watch`** holds while it has no movement order, instead of turning back to its sector next step.
+- **The combat demo** turns each side toward the other with `Watch`.
+
+#### Known limitations of S5a1 (inputs to the next parts)
+- A squad leader in 0003's drill keeps its movement order in the drill, so a halt suspends nothing and
+  `ResumeMovement` (which ends the drill) loses it. S5a2 (squad commands and the drill).
+- A detached member (one with its own order) that learns of an enemy crouches but carries on with its order.
+- `Spotted` is permanent: an enemy that hides and reappears is fired at again at once. Losing track of an enemy, and
+  movement revealing it, are later tickets.
+- A spotter that nobody hears repeats its report every 2 s for as long as the RJ does not know.
+- Spotting checks every fighter against every enemy each step (a sight line each while in the field of view); not
+  measured on st1 with many agents.
+
+#### API the S5a1 tests need from `Twin.Sim`
+- `Twin.Sim.Combat`: record `ObservationRules(ConscriptSeconds, RegularSeconds, SpecialForcesSeconds,
+  ReferenceDistanceMeters, FocusHalfAngleDegrees, FieldOfViewHalfAngleDegrees, FieldOfViewFactor)` with
+  `static ObservationRules Off`; `CombatRules.Observation { get; init; }`.
+- `Twin.Sim.Squads`: record `WatchSectors(IReadOnlyList<double> FileDegrees, IReadOnlyList<double> WedgeDegrees)`
+  (degrees to the right of the direction of travel, in formation order); `SquadDoctrine.WatchSectors` and
+  `SquadDoctrine.VoiceRangeMeters` (`init`); enum `ReportMethod { Voice }`; `Squad.IsHalted`.
+- `Unit.WatchDirection` (`Vec2`); `Simulation.KnowsOf(agentId, enemyId)`.
+- orders `Watch(Vec2 Direction)` and `ResumeMovement`.
+- events `EnemySpotted(Time, AgentId, EnemyId, EnemyPosition)`, `SpotReported(Time, AgentId, EnemyId, EnemyPosition,
+  Method)` (the spotter's report and every relay), `SpotReceived(Time, AgentId, ReporterId, EnemyId, EnemyPosition)`,
+  `SquadHalted(Time, AgentId = leader, SquadId, EnemyId)`, `SquadResumed(Time, AgentId = leader, SquadId)`; all in
+  `EventLog`'s JSON lines.
+- snapshots: `SquadSnapshot.Halted`; `WorldSnapshot.KnownEnemies`, a list of `KnownEnemySnapshot(AgentId, EnemyId,
+  Position)` ordered by agent and enemy, rebuilt by `EventReplay`.
+
+Kit additions: `SpecSpotting` (the values, the formula `SpotSeconds`, the sector table, `Turned`), `ObservationRules.Off`
+in `SpecShooting.Rules`, `Scenario.ForSpotting` / `ForSquadSpotting`, `SpottingAssertions` (`RunUntilSpotted`,
+`ShouldHaveSpottedAfter`, `ReportsOf`, `ReceivedFrom`, …) and `UnitAssertions.BeWatching`.
+
+#### S5a1 tests
+| Criterion | Tests |
+|---|---|
+| SP1–SP6 | `Combat/SpottingTests.cs` (also `Watch` and the watch direction of an agent outside a squad) |
+| SP7 | `Squad/WatchSectorTests.cs` |
+| SP8, SP9 | `Squad/SpotReportTests.cs`; SP8's moving spotter in `Squad/SquadHaltTests.cs` |
+| SP10 | `Squad/SquadHaltTests.cs` |
+| SP11 | `Combat/SpottedEnemyFireTests.cs` |
+| SP12 | `Squad/SpottingDeterminismTests.cs` |
+
+Shared layouts: `Squad/SpottingLayouts.cs`.
+
 ### S6: bounding drills
 - BO1 In `BoundForward` exactly one team moves at a time while the other two fire, in turn point, command, support,
   and each bound is about `20 m`.
@@ -579,6 +751,12 @@ and `SquadMovementAssertions` (`SquadSettled`, `RunUntilSquadSettled`, `ShouldBe
     its team stays with it. Breaking contact is an option, and the squad's return fire should then free the pinned
     fighter to move (S6b). The dead are left; the wounded are carried or helped, and casualties are reported to the
     platoon leader. Casualty care must be implemented (part CC).
+19. **Spotting (S5a1, delivered before the rest of S5a):** spotting takes time (distance, forest, target posture,
+    experience); a watch direction with a focus cone (×1), the rest of the field of view (×3) and nothing behind,
+    adjustable for night vision; movement reveals and darkness later. A spotter reports to the RJ and to squad mates
+    near it; spoken for now, hand signals later. When the RJ knows of an enemy the whole squad halts at once and
+    crouches. Without spotting an enemy a fighter can only fire toward its direction (direction fire is a later
+    ticket). Watch sectors follow the member's place in the formation.
 
 ## Decisions (product owner, 2026-11-17)
 1. **Hard boundary:** the RJ asks; its permit covers the whole formation's width and the squad crosses in formation.

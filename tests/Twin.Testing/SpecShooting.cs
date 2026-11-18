@@ -22,6 +22,11 @@ public static class SpecShooting
     /// <summary>
     /// Line of sight, hit and posture rules of backlog 0002, with the suppression rules and the drill of backlog 0003
     /// (<see cref="SpecSuppression"/>). The 0002 rule "a shot suppresses for 10 s" is gone.
+    /// <para>
+    /// Spotting (backlog 0004 S5a1) is off: these tests are about firing, so a fighter knows every enemy it can see at
+    /// once, all round, as in 0002 and 0003, and nothing is spotted or reported. Spotting tests use
+    /// <see cref="SpecSpotting.Rules"/>.
+    /// </para>
     /// </summary>
     public static CombatRules Rules { get; } = new(
         Standing: Standing,
@@ -40,6 +45,7 @@ public static class SpecShooting
     {
         Suppression = SpecSuppression.Rules,
         Doctrine = Doctrine.Default with { Drill = SpecSuppression.Drill },
+        Observation = ObservationRules.Off,
     };
 
     /// <summary>

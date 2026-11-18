@@ -116,6 +116,19 @@ public sealed class UnitAssertions
     public UnitAssertions HaveActivity(UnitActivity expected) =>
         Check(_unit.Activity == expected, $"to have activity {expected}");
 
+    /// <summary>
+    /// The unit watches toward <paramref name="direction"/> (any length), within <paramref name="toleranceDegrees"/>
+    /// (backlog 0004 S5a1).
+    /// </summary>
+    public UnitAssertions BeWatching(Vec2 direction, double toleranceDegrees = 1)
+    {
+        var watch = _unit.WatchDirection.Normalized();
+        var cos = Math.Clamp(watch.Dot(direction.Normalized()), -1, 1);
+        var off = Math.Acos(cos) * 180 / Math.PI;
+        return Check(off <= toleranceDegrees,
+            $"to watch toward {direction} (±{toleranceDegrees}°), but it watches toward {_unit.WatchDirection}, {off:0.#}° off");
+    }
+
     internal static string DescribeUnit(Unit u) =>
         $"  unit '{u.Id}': position {u.Position}, velocity {u.Velocity}, activity {u.Activity}, " +
         $"health {u.Health}, posture {u.Posture}, pressure {u.SuppressionPressure:0.###}, drill {u.DrillStage}, " +
