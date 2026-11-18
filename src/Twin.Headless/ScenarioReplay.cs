@@ -20,7 +20,8 @@ internal static class ScenarioReplay
         "Usage: ./dev replay <scenario | log.jsonl> [--answer Grant|Deny|NoAnswer] [--every 60] [--out file.jsonl] [--max-seconds 7200]\n" +
         "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
         "  st1-combat runs a built-in fire fight on st1 (two fire teams of three) to replays/st1-combat.jsonl.\n" +
-        "  st1-ambush runs a built-in ambush on st1 (a squad of nine through the corridor, three red fighters) to replays/st1-ambush.jsonl.\n" +
+        "  A squad scenario (e.g. st1-ambush) runs until its leader arrives or is blocked, one side has nobody in action, or nobody\n" +
+        "  has fired for 120 s after the first shot.\n" +
         "  Exit code 2: the run was not over (agent idle or blocked, fight decided) when --max-seconds ran out.";
 
     public static int Run(string[] args)
@@ -81,21 +82,6 @@ internal static class ScenarioReplay
                 every, maxSeconds);
         }
 
-        if (target == AmbushDemo.Name)
-        {
-            if (options.ContainsKey("--answer"))
-            {
-                Console.WriteLine("--answer does not apply to the ambush demo: its platoon leader always grants.");
-                return 1;
-            }
-
-            var ambush = AmbushDemo.Create("scenarios");
-            return RunAndReplay(
-                ambush, () => AmbushDemo.IsOver(ambush), AmbushDemo.Name,
-                options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{AmbushDemo.Name}.jsonl"),
-                () => AmbushDemo.Outcome(ambush), every, maxSeconds);
-        }
-
         var dir = Directory.Exists(target) ? target : Path.Combine("scenarios", target);
         if (!Directory.Exists(dir))
         {
@@ -115,11 +101,17 @@ internal static class ScenarioReplay
         var name = Path.GetFileName(Path.TrimEndingDirectorySeparator(Path.GetFullPath(dir)));
         var scenario = ScenarioDefinition.Load(dir);
         var simulation = scenario.CreateSimulation(answer);
+        var outFile = options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl");
+        if (scenario.Squad is not null)
+        {
+            var end = new SquadRunEnd(simulation);
+            return RunAndReplay(simulation, end.IsOver, $"{name} ({answer})", outFile, end.Outcome, every, maxSeconds);
+        }
+
         var agent = simulation.GetUnit(scenario.AgentId);
         return RunAndReplay(
             simulation, () => agent.IsIdle || agent.Activity == UnitActivity.Blocked, $"{name} ({answer})",
-            options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{name}-{answer}.jsonl"),
-            () => $"agent {agent.Id} {agent.Activity}", every, maxSeconds);
+            outFile, () => $"agent {agent.Id} {agent.Activity}", every, maxSeconds);
     }
 
     private static int RunAndReplay(

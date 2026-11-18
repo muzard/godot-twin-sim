@@ -7,11 +7,12 @@ Tests find this directory with `ScenarioFiles` and load a scenario with `Scenari
 |---|---|
 | `st1/` | Smoke test I: about 1 x 1 km of real MML data (A1–A4, W4, P1) |
 | `st1-2km/` | about 2 x 2 km, pathfinding time only (P1) |
+| `st1-ambush/` | a squad of nine runs into three red fighters on the st1 map (`"world": "../st1/world"`, backlog 0004) |
 
 ```text
 scenarios/<name>/
   README.md               what the scenario is, data sources and the required MML attribution
-  scenario.json           agent, corridor, hard boundaries, scripted leader, seed (below)
+  scenario.json           agent or squad, enemies, corridor, hard boundaries, scripted leader, seed (below)
   world/manifest.json     grid, origin, layers, sources, checksums (below)
   world/h_maa.bin         ground height, float32, meters (N2000)
   world/maastoluokka.bin  terrain class, uint8 (codes below)
@@ -109,6 +110,33 @@ Points are ETRS-TM35FIN `[easting, northing]`, as read from a map; the simulatio
     engaged.
   - `permissionAnswers`: `whenFree` means a permission answer that arrives while the agent is pinned or suppressed is
     handled when it is free; `immediately` means it is handled on time, but the agent still waits.
+- `world` (optional, default `world`) is the world directory relative to the scenario directory, so scenarios can
+  share a map: `"world": "../st1/world"`.
+- Instead of `agent`, a scenario can have a `squad` (backlog 0004; exactly one of the two):
+
+  ```json
+  "squad": {
+    "id": "blue", "start": [403915.0, 6686879.0], "formation": "wedge", "rules": "freeFire",
+    "teams": ["command", "point", "support"],
+    "members": [
+      { "id": "rj", "role": "squadLeader", "team": "command", "experience": "regular" },
+      { "id": "kk", "role": "machineGunner", "team": "support", "experience": "conscript", "weapon": "machineGun" }
+    ]
+  }
+  ```
+
+  Roles: `squadLeader`, `secondInCommand`, `teamLeader`, `machineGunner`, `rifleman`. A member's `experience`
+  (`conscript`, `regular`, `specialForces`; default `regular`), `weapon` (`rifle` or `machineGun`; default `rifle`) and
+  `rules` (`freeFire`, `returnFire`, `holdFire`; default the squad's, which defaults to `returnFire`) are optional, as is
+  the squad's `formation` (`file` or `wedge`; default `file`). The squad is checked as the simulation checks any squad
+  (one squad leader, a leader in every team, ...). Members start in their slots of the starting formation around
+  `start`, along the corridor's first segment; the squad leader gets the corridor order.
+- `enemies` (optional) are fighters that get no movement order:
+  `{ "id": "red-mg", "position": [E, N], "side": "red", "posture": "prone", "rules": "freeFire", "weapon": "machineGun",
+  "experience": "regular", "watchToward": [E, N] }`. Only `id` and `position` are required; the defaults are those
+  shown, except `posture` `standing`, `weapon` `rifle` and no `watchToward` (the fighter keeps its default watch).
+- The squad is always on the blue side. A scenario that cannot be placed fails when it is loaded: a squad start, a
+  member's starting slot or an enemy off the map, an id used twice, a corridor whose first segment has no length.
 - `expect` is read only by tests: `detourWithoutCrossing` says whether B can be reached inside the corridor without
   crossing any hard boundary, including leaving forest. A person sets it after studying the area.
 

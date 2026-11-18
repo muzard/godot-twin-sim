@@ -1,8 +1,8 @@
 # 0004. Squad: leadership, formations and drills under fire (Smoke test II)
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
-(2026-11-17); S2a and S2b specified and implemented (2026-11-18); S2c specified and implemented (2026-11-18); S5a1
-(spotting) specified and implemented (2026-11-18); S2d, S5a2–S6 have no tests yet. Drafted as 0003 in parallel with
+(2026-11-17); S2a and S2b specified and implemented (2026-11-18); S2c specified and implemented (2026-11-18); S2d specified and implemented (2026-11-19); S5a1
+(spotting) specified and implemented (2026-11-18); S5a2–S6 have no tests yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -657,6 +657,58 @@ after the line was laid out has no spot and is not waited for. Edge cases found 
 `SquadEdgeDeploymentEdgeCaseTests` (a squad in file, a squad that starts in the open, a clearing on the way and a second
 edge, a leader already closer than 5 m) and `HeadingEdgeCaseTests` (a lone agent faces any way it moves, keeps its
 heading when it stops).
+
+#### S2d spec decisions (2026-11-18; tests reviewed, implemented 2026-11-19)
+Decided with the product owner: the `squad` section as drafted above (members listed one by one); enemies as a list of
+fighters; the st1 ambush demo becomes a scenario file; the replay marks the squad leader and shows the squad's id and
+formation. The details below were accepted with the tests.
+- **`squad` or `agent`:** a scenario has exactly one of them. A squad needs `id`, `start` (ETRS), `teams` and `members`
+  (each `id`, `role`, `team`; optional `experience`, default `regular`; optional `weapon`, default `rifle`; optional
+  `rules`, default the squad's). The squad's optional `formation` (default `file`) and `rules` (`freeFire`,
+  `returnFire` or `holdFire`; default `returnFire`) apply to every member. The definition is validated as in
+  `Simulation.AddSquad` (one squad leader, a leader in every team and so on); an invalid squad fails the load with a
+  message naming the problem.
+- **Where members start:** the squad leader at `start`, everyone else in its slot of the starting formation laid out
+  along the corridor's first segment (facing the way the corridor runs), so the squad moves off already formed.
+- **Weapons by name:** `rifle` (`WeaponProfile.Rifle`) and `machineGun`, a new `WeaponProfile.MachineGun` in
+  `Twin.Sim` with backlog 0003's open values (bursts of 5, 800 m, 500 rounds; to be calibrated).
+- **`enemies`:** an optional list of fighters, each `id`, `position` (ETRS); optional `side` (default `red`),
+  `posture` (default `standing`), `rules` (default `freeFire`), `weapon` (default `rifle`), `experience` (default
+  `regular`) and `watchToward` (ETRS; the fighter watches that point, as a `Watch` order). Enemies get no movement
+  order (later parts).
+- **`world`:** optional path of the world directory, relative to the scenario directory (default `world`), so
+  `scenarios/st1-ambush` uses `../st1/world` instead of a copy of the map.
+- **The run:** `CreateSimulation` places the squad (or the agent) and the enemies and issues the corridor order to the
+  squad leader. `./dev replay` ends a squad run when the leader has arrived or is blocked, when one side has nobody in
+  action, or when shots have been fired and nobody has fired for 120 s (as the ambush demo did).
+- **`scenarios/st1-ambush`:** the ambush demo as a file (same squad, red, corridor and leader); the code demo
+  (`AmbushDemo`) is removed and `./dev replay st1-ambush` runs the file.
+- **SM10:** an acceptance test runs the reference squad through the st1 corridor from A for 30 min of simulated time,
+  measures the wall-clock time with `Stopwatch` (as P1) and prints it; it fails if the squad has not got past the forest
+  road at x = 330 (a check that the run is meaningful), not on the time.
+- **The replay (Godot):** the squad leader's dot gets a second ring, and the squad's id and formation are written next
+  to it (`blue: wedge`; `halted` while the squad is halted). Presentation only, no tests.
+
+#### API the S2d tests need from `Twin.Sim`
+- `ScenarioDefinition`: `Squad` (a `SquadDefinition`, null for an agent scenario), `SquadStart`, `SquadCombatants`
+  (each member's `Combatant`, by id), `Enemies` (`ScenarioEnemy`: `Id`, local `Position`, `Combatant`, `Posture`,
+  `WatchToward`, null if none). *(Changed with approval in the implement phase:)* `AgentId` is the agent the corridor
+  order goes to, so in a squad scenario the squad leader; a null id would have broken the st1 tests' non-null use.
+- `WeaponProfile.MachineGun`.
+
+#### S2d tests
+| Test | Checks |
+|---|---|
+| `ScenarioSquadTests` (Twin.Sim.Tests) | the squad section and each member's fighter; defaults (regular, rifle, the squad's rules, file); members start in their slots along the corridor; the leader gets the corridor order; the enemies section and its defaults; enemies placed, prone, watching their point, not moved; a shared world; exactly one of agent and squad; an invalid squad and an unknown weapon fail with a message; `WeaponProfile.MachineGun` = 0003's values |
+| `St1AmbushTests` (Twin.Acceptance.Tests) | `scenarios/st1-ambush` places 9 + 3 on the st1 map; the squad halts on red within 5 min; SM10: 30 min of a squad on st1, wall-clock time printed (`./dev smoke`), the squad gets past x = 330 |
+
+Changed with approval in the implement phase: the enemy watch test runs 5 s, not 20 s (by 20 s red-mg has spotted the
+squad at the edge of its view and watches it, as S5a1 says), and the squad test expects `AgentId` = `rj`.
+Found in review and tested in `ScenarioSquadValidationTests`: a scenario that cannot be placed fails when it is loaded
+(a squad start, a member's starting slot or an enemy off the map, an id used twice across the squad and the enemies, a
+corridor whose first segment has no length). Starting in impassable terrain is not checked (as for one agent).
+Kit: `TestScenarioFolder` writes and loads a scenario directory with a flat open world; `ScenarioOnDisk.Load` follows
+the scenario's `world` key. SM10 passes before the implementation (it measures what S2a–S2c already do).
 
 ### S3: formations
 - FO1 On flat open ground each formation's members are within `1 m` **[PROPOSAL]** of their slots after settling.

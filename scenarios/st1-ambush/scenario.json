@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "seed": 1,
+  "dtSeconds": 0.5,
+  "world": "../st1/world",
+  "squad": {
+    "id": "blue",
+    "start": [403915.0, 6686879.0],
+    "formation": "wedge",
+    "rules": "freeFire",
+    "teams": ["command", "point", "support"],
+    "members": [
+      { "id": "rj", "role": "squadLeader",     "team": "command", "experience": "regular" },
+      { "id": "j1", "role": "rifleman",        "team": "command", "experience": "conscript" },
+      { "id": "j2", "role": "rifleman",        "team": "command", "experience": "regular" },
+      { "id": "pj", "role": "teamLeader",      "team": "point",   "experience": "conscript" },
+      { "id": "k1", "role": "rifleman",        "team": "point",   "experience": "conscript" },
+      { "id": "k2", "role": "rifleman",        "team": "point",   "experience": "regular" },
+      { "id": "vj", "role": "secondInCommand", "team": "support", "experience": "regular" },
+      { "id": "kk", "role": "machineGunner",   "team": "support", "experience": "conscript", "weapon": "machineGun" },
+      { "id": "t1", "role": "rifleman",        "team": "support", "experience": "conscript" }
+    ]
+  },
+  "enemies": [
+    { "id": "red-1",  "position": [404157.0, 6686962.0], "posture": "prone", "watchToward": [404020.0, 6686930.0] },
+    { "id": "red-mg", "position": [404148.0, 6686972.0], "posture": "prone", "weapon": "machineGun", "watchToward": [404020.0, 6686930.0] },
+    { "id": "red-2",  "position": [404152.0, 6686966.0], "posture": "prone", "watchToward": [404020.0, 6686930.0] }
+  ],
+  "corridor": {
+    "centerline": [[403915.0, 6686879.0], [404300.0, 6687050.0]],
+    "width": 100,
+    "softMargin": 25,
+    "softPenalty": 1,
+    "hardBoundaries": []
+  },
+  "leader": { "answer": "grant", "delaySeconds": 30, "permitRadius": 25 },
+  "permission": { "threshold": 1.5, "timeoutSeconds": 120 }
+}
