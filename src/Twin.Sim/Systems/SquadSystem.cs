@@ -131,6 +131,9 @@ public sealed class SquadSystem : ISimSystem
             case MoveTo or MoveThroughCorridor:
                 squad.Heard(unit.Id, command); // the movement order brief: the member now knows the squad's order
                 break;
+            case DeployAtForestEdge when squad.EdgeDeployment is { } line && ReferenceEquals(line.Command, command):
+                line.Acted.Add(unit.Id); // it moves to its spot in the open line (S2c)
+                break;
             default:
                 break;
         }

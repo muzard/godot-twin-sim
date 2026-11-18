@@ -39,7 +39,7 @@ public sealed class Simulation
         _systems =
         [
             new CombatStatusSystem(), new SquadFollowSystem(), new SquadCohesionSystem(), new MovementSystem(),
-            new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem(),
+            new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem(), new ObservationSystem(),
         ];
     }
 
@@ -542,6 +542,8 @@ public sealed class Simulation
             hash.Add(unit.IsAwaitingOrders ? 1 : 0);
             hash.Add(unit.RoundsLeft);
             hash.Add(unit.CurrentOrder?.ToString() ?? "none");
+            hash.Add(unit.Heading.X);
+            hash.Add(unit.Heading.Y);
         }
 
         foreach (var squad in _squads.Values)
@@ -587,6 +589,20 @@ public sealed class Simulation
             hash.Add(squad.MovementOrder?.ToString() ?? "none");
             hash.Add(squad.OrderRequestedAt ?? -1);
             hash.Add(squad.PendingRequest?.ToString() ?? "none");
+            if (squad.EdgeDeployment is { } line)
+            {
+                foreach (var (id, spot) in line.Spots)
+                {
+                    hash.Add(id);
+                    hash.Add(spot.X);
+                    hash.Add(spot.Y);
+                }
+
+                foreach (var id in line.Acted)
+                {
+                    hash.Add(id);
+                }
+            }
             foreach (var delivery in squad.Deliveries)
             {
                 hash.Add(delivery.UnitId);

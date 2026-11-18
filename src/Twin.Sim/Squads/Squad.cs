@@ -75,6 +75,12 @@ public sealed class Squad
     internal MemberRequest? PendingRequest { get; set; }
 
     /// <summary>
+    /// The squad's last open line at the forest edge (S2c). Members stand to it only while its leader's corridor order is
+    /// deployed there (see <see cref="Systems.CorridorProgress.Deployment"/>).
+    /// </summary>
+    internal EdgeLine? EdgeDeployment { get; set; }
+
+    /// <summary>
     /// True once <paramref name="unitId"/> has heard the squad's current movement order: the leader that got it, and every
     /// member that has acted on its brief (backlog 0004, S2b).
     /// </summary>
@@ -98,6 +104,7 @@ public sealed class Squad
         _permits.Clear();
         _refused.Clear();
         PendingRequest = null;
+        EdgeDeployment = null;
     }
 
     internal void ClearMovementOrder()

@@ -154,6 +154,7 @@ public sealed class SquadCohesionSystem : ISimSystem
 
         var anyFar = false;
         var allNear = true;
+        var deployingAtEdge = SquadSlots.GoingToDeployAtEdge(simulation, squad);
         foreach (var member in squad.Members)
         {
             if (member.UnitId == leaderId || !squad.IsFollowing(member.UnitId))
@@ -165,6 +166,12 @@ public sealed class SquadCohesionSystem : ISimSystem
             if (SquadSlots.IsCasualty(unit))
             {
                 return true;
+            }
+
+            if (deployingAtEdge && SquadSlots.FirstUnpermittedCrossing(simulation, squad, [unit.Position.Xy, slots[member.UnitId]])
+                is { BoundaryId: HardBoundary.ForestEdgeId })
+            {
+                continue; // it waits at the edge for the leader to come up and deploy the squad (S2c)
             }
 
             var distance = unit.Position.Xy.DistanceTo(slots[member.UnitId]);
@@ -295,6 +302,12 @@ public sealed class SquadFollowSystem : ISimSystem
             else if (position.DistanceTo(stopAt) > 1e-9)
             {
                 slot = stopAt; // S2b: it walks up to the boundary first
+            }
+            else if (crossing.BoundaryId == HardBoundary.ForestEdgeId && SquadSlots.GoingToDeployAtEdge(simulation, squad))
+            {
+                member.Velocity = Vec3.Zero; // the leader deploys the squad at the edge and asks for it (S2c)
+                CombatQueries.SetActivity(member, UnitActivity.Idle);
+                return;
             }
             else
             {

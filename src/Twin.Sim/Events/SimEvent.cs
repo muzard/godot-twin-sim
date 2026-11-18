@@ -213,6 +213,15 @@ public sealed record OrderRequested(double Time, string AgentId, string SquadId)
 /// <param name="SquadId">The squad.</param>
 public sealed record OrderRepeated(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
 
+/// <summary>
+/// The squad has deployed in its open line at the forest edge (backlog 0004, S2c): every able member stands in its spot.
+/// Its leader asks to leave the forest on the same step.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The squad leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record EdgeDeployed(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
 /// <summary>One squad in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The squad.</param>
 /// <param name="LeaderId">Its leader, or null while the place is empty.</param>

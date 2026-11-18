@@ -76,7 +76,8 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 fire mode and rounds to `ShotFired`, replaces `SuppressionStarted`'s `until` with `heavy`, and adds
 `ContactDrillStageChanged` and `ContactReported`; replay also rebuilds heavy suppression, the drill stage and waiting
 for orders. Squads (backlog 0004) add `SquadFormed` (with the teams and their first leaders), `CommandIssued`,
-`CommandReceived`, `LeaderChanged`, `TeamLeaderChanged`, `FormationChanged`, `OrderRequested` and `OrderRepeated`;
+`CommandReceived`, `LeaderChanged`, `TeamLeaderChanged`, `FormationChanged`, `OrderRequested`, `OrderRepeated` and
+`EdgeDeployed` (the squad's open line at the forest edge has formed; the deployment itself is a `CommandIssued`);
 replay rebuilds each squad's leader, team leaders and formation. A
 leader's place is empty from its `HealthChanged` to `OutOfAction` until its successor's change event.
 
