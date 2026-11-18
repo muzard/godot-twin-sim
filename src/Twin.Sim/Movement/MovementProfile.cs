@@ -59,8 +59,11 @@ public sealed record MovementProfile(
 /// <param name="Corridor">The corridor; null searches the whole world without corridor costs or drawn boundaries.</param>
 /// <param name="Permits">Permits that open hard boundaries near given points.</param>
 /// <param name="IgnoreHardBoundaries">True for the reference route: hard boundaries, including the forest edge, are ignored.</param>
+/// <param name="Window">If set, the search stays inside this rectangle (minimum and maximum corner), for example a squad
+/// member's local search around itself (backlog 0004).</param>
 public sealed record PathOptions(
-    Corridor? Corridor = null, IReadOnlyList<CrossingPermit>? Permits = null, bool IgnoreHardBoundaries = false);
+    Corridor? Corridor = null, IReadOnlyList<CrossingPermit>? Permits = null, bool IgnoreHardBoundaries = false,
+    (Vec2 Min, Vec2 Max)? Window = null);
 
 /// <summary>The result of a path search.</summary>
 /// <param name="Found">True if a path exists.</param>

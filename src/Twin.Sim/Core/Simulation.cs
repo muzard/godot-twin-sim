@@ -36,7 +36,11 @@ public sealed class Simulation
         Random = new DeterministicRandom(Config.Seed);
 
         // System order is part of the simulation's behaviour. Change it deliberately.
-        _systems = [new CombatStatusSystem(), new MovementSystem(), new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem()];
+        _systems =
+        [
+            new CombatStatusSystem(), new SquadFollowSystem(), new SquadCohesionSystem(), new MovementSystem(),
+            new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem(),
+        ];
     }
 
     /// <summary>The ground surface.</summary>
@@ -108,7 +112,7 @@ public sealed class Simulation
             _squadOfUnit.Add(member.UnitId, squad);
         }
 
-        Log(new SquadFormed(TimeSeconds, leaderId, squad.Id, squad.Teams, teamLeaderIds));
+        Log(new SquadFormed(TimeSeconds, leaderId, squad.Id, squad.Teams, teamLeaderIds, squad.Formation));
         return squad;
     }
 
@@ -118,6 +122,16 @@ public sealed class Simulation
 
     /// <summary>The squad <paramref name="unitId"/> belongs to, or null if it is in none.</summary>
     public Squad? SquadOf(string unitId) => _squadOfUnit.GetValueOrDefault(unitId);
+
+    /// <summary>
+    /// Where <paramref name="unitId"/>'s slot in its squad's formation is now (backlog 0004, S2a): for a squad leader its
+    /// own position. Null for an agent outside a squad, a member detached by a direct order, and every member before its
+    /// leader's first movement order.
+    /// </summary>
+    public Vec2? SlotOf(string unitId) =>
+        SquadOf(unitId) is { } squad && SquadSlots.Compute(this, squad) is { } slots && slots.TryGetValue(unitId, out var slot)
+            ? slot
+            : null;
 
     /// <summary>
     /// True if <paramref name="observerId"/> sees <paramref name="targetId"/> now: the line from its eyes to the target's
@@ -150,7 +164,7 @@ public sealed class Simulation
                 u.IsHeavilySuppressed, u.DrillStage, u.IsAwaitingOrders))
             .ToList())
         {
-            Squads = _squads.Values.Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds])).ToList(),
+            Squads = _squads.Values.Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds], s.Formation)).ToList(),
         };
 
     /// <summary>Gets a unit by id.</summary>
@@ -188,9 +202,19 @@ public sealed class Simulation
             throw new OrderRejectedException($"Unit '{unitId}' is not a fighter.");
         }
 
-        if (order is SetSquadPosture && SquadOf(unitId)?.LeaderId != unitId)
+        if (order is SetSquadPosture or SetSquadFormation && SquadOf(unitId)?.LeaderId != unitId)
         {
             throw new OrderRejectedException($"Unit '{unitId}' does not lead a squad.");
+        }
+
+        if (order is SetSquadFormation { Formation: var formation } && !Enum.IsDefined(formation))
+        {
+            throw new OrderRejectedException($"Unknown formation {formation}.");
+        }
+
+        if (order is Rejoin && (SquadOf(unitId) is not { } own || own.LeaderId == unitId))
+        {
+            throw new OrderRejectedException($"Unit '{unitId}' is not a squad member who could rejoin its squad.");
         }
 
         if (order is MoveTo move && !Terrain.Contains(move.Destination))
@@ -213,10 +237,15 @@ public sealed class Simulation
         foreach (var (unitId, order) in _pendingOrders)
         {
             var unit = _units[unitId];
-            if (order is not SetPosture)
+            if (order is not SetPosture && !(order is Rejoin && SquadOf(unitId)?.IsFollowing(unitId) == true))
             {
                 ContactDrillSystem.End(this, unit);    // any new order ends the drill under fire
                 ContactDrillSystem.Answer(unit);       // and the leader's order stands against the fire it answers
+            }
+
+            if (order is not Rejoin && SquadOf(unitId) is { } detachedFrom && detachedFrom.LeaderId != unitId)
+            {
+                detachedFrom.Detach(unitId); // any order straight to a member takes it out of the squad's movement
             }
 
             switch (order)
@@ -234,11 +263,17 @@ public sealed class Simulation
                 case Stop:
                     CombatQueries.EndOrder(unit); // zero velocity, idle, no current order
                     break;
-                case SetSquadPosture when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
+                case SetSquadPosture or SetSquadFormation when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
                     SquadSystem.Command(this, squad, unit, order); // keeps the current order
                     break;
-                case SetSquadPosture:
+                case SetSquadPosture or SetSquadFormation:
                     break; // the unit lost command of its squad after the order was issued
+                case Rejoin when SquadOf(unitId) is { } squad && !squad.IsFollowing(unitId):
+                    CombatQueries.EndOrder(unit);
+                    squad.Rejoin(unitId);
+                    break;
+                case Rejoin:
+                    break; // already following
                 default:
                     CombatQueries.EndOrder(unit);
                     unit.CurrentOrder = order;
@@ -503,6 +538,23 @@ public sealed class Simulation
             foreach (var teamLeader in squad.TeamLeaderIds)
             {
                 hash.Add(teamLeader ?? "none");
+            }
+
+            hash.Add((long)squad.Formation);
+            hash.Add(squad.LeaderHeld ? 1 : 0);
+            hash.Add(squad.MovementStarted ? 1 : 0);
+            hash.Add(squad.LeaderTrail.Count);
+            foreach (var point in squad.LeaderTrail)
+            {
+                hash.Add(point.X);
+                hash.Add(point.Y);
+            }
+
+            hash.Add(squad.Corridor is null ? 0 : 1);
+            foreach (var member in squad.Members)
+            {
+                hash.Add((long)squad.FormationOf(member.UnitId));
+                hash.Add(squad.IsFollowing(member.UnitId) ? 1 : 0);
             }
 
             foreach (var delivery in squad.Deliveries)

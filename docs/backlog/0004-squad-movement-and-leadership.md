@@ -1,7 +1,7 @@
 # 0004. Squad: leadership, formations and drills under fire (Smoke test II)
 
 **Status:** design agreed with the product owner (2026-11-17). S1 specified (tests reviewed) and implemented
-(2026-11-17); S2–S6 have no tests yet. Drafted as 0003 in parallel with
+(2026-11-17); S2a specified and implemented (2026-11-18); S2b–S6 have no tests yet. Drafted as 0003 in parallel with
 [0003 (suppression and the contact drill)](0003-suppression-and-contact-drill.md), which merged first; renumbered to 0004
 and its experience unified with 0003's (see "Experience unified with 0003" below). S4 and S5 overlap 0003 and must be
 redesigned on top of it before their spec phase. Values marked **[PROPOSAL]** are
@@ -9,8 +9,46 @@ starting values; as in 0002, tests will read them from one place (`SpecSquad` an
 `tests/Twin.Testing`), so calibrating them later does not change what a test checks. The decisions are listed under
 "Decisions" at the end.
 
-This is an epic. It is delivered in six parts (S1–S6 below). Each part is its own spec → review → implement cycle and
-its own pull request, in this order.
+This is an epic. It was planned as six parts (S1–S6 below); after S1 it is delivered as the parts of the
+**ambush slice** below. Each part is its own spec → review → implement cycle and its own pull request, in this order.
+
+## Delivery plan: the ambush slice (2026-11-18)
+Goal: a squad moves through a corridor on st1 in file or wedge, runs into an ambush, every member reacts on its own,
+and the RJ then directs the squad's fire and manoeuvres it: forward by bounds against a weak enemy, back by bounds
+otherwise. Decided with the product owner on 2026-11-18:
+
+- **Immediate action needs no leader.** Under fire each member does 0003's drill on its own (snap shots, cover,
+  firing position, aimed fire, contact report). There is **no `TakeCoverAndReturnFire` command**; it is replaced by
+  0003's drill. The RJ's part starts after it: **a) directing fire, b) manoeuvring the squad.**
+- **Formations in S2:** file (jono) and wedge (kiila). The other five come with S3, after the slice.
+- **S2 in full:** hard-boundary permits, cohesion, forest-edge deployment and the `squad` section of scenario.json.
+- **S5 and S6 in full,** bounding included, in parts.
+- **S4 is mostly done by 0003** (machine gun bursts, suppression per round, light and heavy suppression). What is left
+  (the weapon class of a heard shot) moves into S5a.
+
+| Part | Content | Criteria (redesigned in its spec phase) |
+|---|---|---|
+| **S1** | Squad, roles, chain of command, succession | SQ1–SQ6, done (PR #11) |
+| **S2a** | Squad movement: only the RJ is ordered; file and wedge slots along the RJ's route; members move straight or by local A*; cohesion (leader at 0.8 ×, waits for stragglers); arrival in slots; `SetSquadFormation` through the chain of command; a member ordered directly leaves the squad's movement until `Rejoin` | SM1, SM2, SM8, SM9, FO1–FO3 for file and wedge |
+| **S2b** | Hard boundaries: the RJ asks, the squad halts, a permit covers the formation, a member at the boundary waits; forest-edge deployment in an open line | SM3–SM7 |
+| **S2c** | scenario.json `squad` section (and the enemies an ambush needs); a squad crossing st1, timed; the Godot replay marks the squad and its leader | SM10 |
+| **S5a** | Contact reaches the RJ up the chain (relay delays, slowed by suppression); the RJ's enemy estimate (distinct enemies, heavy machine gun by the sound of a heard shot); the squad's movement is suspended under contact, not lost; suppression slows commands and takeover; squad commands and 0003's drill no longer conflict (the two S1 limitations) | UF1, UF5–UF7, WS3 |
+| **S5b** | The RJ directs fire: commands members or teams to fire at reported enemies (fire control) | new criteria |
+| **CC** | Casualty care (0002's foundation): tell the dead from the badly wounded; the dead are left, the wounded are carried or helped by squad mates (`GivingAid`), which slows the squad and takes fighters out of the fight; the RJ reports casualties to the platoon leader | new criteria; replaces S2a's provisional "out of action halts the squad" |
+| **S6a** | Bounding forward: one team moves a bound while two fire; the RJ advances on its own against a weak enemy (≤ 3 fighters, no reinforcing factor); a team that cannot move reports `BoundImpossible` and the next one bounds; an order to the RJ overrides its decision; afterwards the squad re-forms and resumes the corridor | UF3, UF8, UF10, BO1–BO5 |
+| **S6b** | Breaking contact by bounds back along the route after 2 casualties or 120 s of fire, until out of contact for 60 s; then the squad re-forms. Wounded are taken along (CC), not left; the squad's return fire frees a pinned member to move | UF9, BO for withdrawal |
+| **Ambush** | The st1 ambush end to end as an acceptance test and a replay to watch in Godot | new |
+
+**Open questions, each decided in its part's spec phase** (not yet decided):
+- S2a (decided 2026-11-18): **every** order given straight to a member (`MoveTo`, `FireAt`, `SetPosture`, …; anything
+  but `Rejoin`) detaches it until `Rejoin`.
+- S5a: does a member that is not under fire itself (a squad mate is hit, or fire passes 10 m away) start the drill,
+  or only the members 0003's "under fire" rule catches? With a leader that halts under fire, the squad halts either way.
+- S5a: what the movement of members not in the drill does while the RJ is in it (halt in place, or go prone).
+- S5b: how the RJ distributes fire: every member at the nearest reported enemy, or one enemy per team, or sectors.
+- S6a: which team bounds first, the bound length (20 m [PROPOSAL]), where the RJ is, and when the advance ends
+  (the enemy out of action, or a distance) and what follows (re-form and resume the corridor).
+- S6b: how far back the squad withdraws and how it takes up its corridor again.
 
 ## Story
 As an exercise designer, I place a squad (ryhmä) on real terrain and give one order to its leader: move through this
@@ -89,10 +127,12 @@ the `squad` section of scenario.json.
   wedge is ahead on the route even before a turn.
 - **Cohesion:** the leader moves at `0.8 ×` its terrain speed **[PROPOSAL]**, so members have a reserve to catch up.
   It halts when an able member is more than `max(20 m, 2 × interval)` **[PROPOSAL]** behind its slot, and moves on
-  when all are back. Pinned and out-of-action members do not hold the squad (until casualty care exists).
+  when all are back. ~~Pinned and out-of-action members do not hold the squad~~ *(superseded by decision 18: nobody
+  is left behind; see "S2a spec decisions")*.
 - **Corridor:** members stay inside the corridor's outer limit. If the formation is wider than the corridor's inner
-  zone, the formation's lateral intervals are compressed evenly to fit; below a 2 m interval the squad moves in an
-  open file instead **[PROPOSAL]**.
+  zone, the formation's lateral intervals are compressed evenly to fit; ~~below a 2 m interval the squad moves in an
+  open file instead~~ *(superseded by decision 17: the lateral gap stays at least 1 m, below that the squad moves in
+  file)*.
 - **Hard boundaries:** members never cross a hard boundary without a permit. Only the RJ asks the scripted leader,
   and the whole squad halts while it waits. A permit given to the RJ covers the whole formation: it is valid for every
   member of the squad within `permit radius + the formation's half-width` of the requested point, so the squad crosses
@@ -168,6 +208,9 @@ still pass unchanged.
   - **reinforcing factors:** a heavy machine gun (recognised by its sound) and a strong fortification. There is no
     fortification model yet, so that factor is never present until a later ticket adds it;
   - it is logged as `EnemyEstimateChanged(squad, fighters, factors)`.
+- *Superseded on 2026-11-18 (see "Delivery plan: the ambush slice"): there is no `TakeCoverAndReturnFire` command;
+  each member does 0003's drill on its own, and the RJ then directs fire (S5b) and manoeuvres (S6). The text below is
+  the original design and is redesigned in S5's spec phase.*
 - **The RJ decides.** On the first contact report the RJ commands a drill (`CommandIssued`); members carry it out after
   their command delays (`CommandReceived`). The rules are `SquadDoctrine`, all values **[PROPOSAL]** unless stated:
   - on the first contact report: `TakeCoverAndReturnFire`;
@@ -350,8 +393,118 @@ place each fighter with it), `Scenario.ForSquad`, `WithSquad`,
   deployed, or after the deployment time limit.
 - SM7 A drawn boundary does not trigger the deployment; the squad halts in formation.
 - SM8 The leader waits for a member that falls behind (for example one slowed by a bog) and moves on when it is back.
-- SM9 A pinned or out-of-action member does not hold the squad.
+- SM9 ~~A pinned or out-of-action member does not hold the squad.~~ *Superseded by decision 18:* nobody is left behind;
+  a pinned member halts the squad, a wounded one is waited for (see "S2a spec decisions").
 - SM10 On st1, a squad crosses the scenario corridor; the time for a 30 min run is measured and recorded (like P1).
+
+#### S2a spec decisions (2026-11-18)
+- **Interval: 10 m between neighbours in both file and wedge** (`SquadDoctrine.IntervalMeters`). ⚠ **Provisional:** in
+  reality the spacing depends on the terrain (closer in forest and at night, wider in the open). It must be made
+  terrain-dependent later; one value is a starting point only.
+- **Compression:** a formation wider than the corridor's inner zone has its lateral offsets scaled down evenly to fit
+  `w/2`, but the lateral gap between neighbouring slots stays at least **1 m** (`MinimumGapMeters`, to be raised later);
+  if it cannot, the squad moves in file.
+- **Formation order, front to back:** the teams with neither the squad leader nor the second-in-command, in team order
+  (the point team), then the squad leader's team, then the second-in-command's team (decision 7). Within a team,
+  squad order. Reference squad: pj, k1, k2, rj, j1, j2, vj, kk, t1.
+- **File (jono):** everyone on the RJ's path, 10 m apart, in formation order; the point team ahead of the RJ on its
+  route, the rest behind it on the path it walked.
+- **Wedge (kiila):** one squad wedge. The first member (pj) at the apex; the others alternate left and right arm in
+  formation order, 10 m apart along each arm at 45° (7.07 m back and 7.07 m out per step). The RJ walks the route
+  itself, on the wedge's axis at the depth of its place, so its own arm slot stays empty:
+
+  ```
+          pj
+        k1  k2
+      ·  rj  j1
+    j2          vj
+  kk              t1
+  ```
+- **Slots follow the route.** A slot is `(along, across)` relative to the RJ, measured along the RJ's path (its planned
+  route ahead, the path it walked behind) and across it at that point. Beyond the ends the path is extended straight.
+  The members follow whatever moves the RJ: a corridor order or a `MoveTo` (a straight route). Before the RJ's first
+  movement order nobody moves (forming a squad moves no one, SQ1).
+- **A slot that is not usable** (impassable terrain, or outside the corridor's outer limit) is moved to the nearest
+  usable point on the line from the slot toward its point on the RJ's path (FO5). If that point on the path is not
+  usable either (a file's rear slots behind the start of a narrow corridor, for example), the point moves along the path
+  toward the RJ until it is. A route through cell centers can jog back a little at its ends (to the start cell's center,
+  past the last cell center to the exact destination); such jogs of up to 3 m are left out of the path so they do not
+  turn the formation round.
+- **Members** move toward their slot at their own terrain speed, in a straight line, or by A* in a `64 × 64 m` window
+  around them when the straight line is blocked; they never leave the corridor's outer limit or cross a cliff. Hard
+  boundaries and the forest edge are S2b: S2a tests have none on the way.
+- **Cohesion:** the RJ moves at `0.8 ×` its speed. It halts (`UnitActivity.WaitingForSquad`) while an able member is
+  more than `20 m` from its slot, and moves on when every able member is within `5 m` of it. So a squad first forms up,
+  then moves off. Members detached by a direct order do not count.
+- **Nobody is left behind** (product owner, 2026-11-18). A squad does not move on normally under fire: **while any member
+  is pinned, the whole squad halts** (`WaitingForSquad`). A wounded member (slower) is waited for like any straggler.
+  The dead are left and the badly wounded are carried or helped, but the model cannot yet tell them apart
+  (`OutOfAction` covers both); until casualty care exists, **an out-of-action member halts the squad too**
+  (provisional). Breaking contact, where the squad's return fire frees a pinned member to move, belongs to S6b.
+- **Arrival:** when the RJ arrives, the members take their slots around it (the path extended beyond the destination)
+  and become idle there.
+- **Direct orders:** every order given straight to a member (not the RJ), not only a movement order, detaches it from
+  the squad's movement until it is ordered `Rejoin` (product owner, 2026-11-18); the squad does not wait for it meanwhile. `Rejoin` to the leader or to an agent outside a squad is
+  rejected; to a member already following it changes nothing.
+- **Formation changes:** `SetSquadFormation(formation)` to the RJ, through the chain of command as in S1: each member
+  takes its new slot when it acts on the command. The squad's formation at forming is `SquadDefinition.Formation`
+  (default file).
+
+#### Known limitations of S2a (inputs to the next parts)
+None of these is reached by an S2a scenario; each is recorded so its part decides it on purpose.
+- **A new leader does not take over the movement order.** When the RJ falls mid-move, the VJ takes command (S1) with
+  no movement order of its own; the members hold their ground until it gets one (tested). The ticket's design passes the
+  squad's order and permits to the successor: S2b, with permits.
+- **The leader in 0003's drill:** while the leader is in the drill the members do not follow (they hold, or do their
+  own drill if they are under fire); its rush to cover is not recorded as the squad's path. A following member's own
+  drill searches cover without a corridor, since it has no order of its own. S5a.
+- **A leader waiting for permission** (S2b): the route ahead is then a straight line to the destination, so the
+  formation turns toward it while the squad halts.
+- **Straight moves ignore hard boundaries and the forest edge;** a member's local path search respects them. S2b makes
+  this consistent.
+- **Performance on st1** is not measured yet (SM10, S2c). Slots are computed a few times per step; the trail keeps a
+  point every 0.5 m and only as far back as the deepest slot needs; the route ahead is cut where no slot reaches; a
+  blocked member searches its 64 m window again every step.
+
+#### API the S2a tests need from `Twin.Sim`
+- `Twin.Sim.Squads`: enum `SquadFormation` (`File`, `Wedge`); `SquadDefinition(..., Formation = File)`;
+  `SquadDoctrine(..., IntervalMeters = 10, MinimumGapMeters = 1, LeaderSpeedFactor = 0.8, StragglerMeters = 20,
+  RegroupMeters = 5, LocalSearchMeters = 64)`; `Squad.Formation` (commanded), `Squad.FormationOf(unitId)` (the one the
+  member acts on), `Squad.IsFollowing(unitId)` (true unless detached by a direct order); record
+  `FormationSlot(UnitId, Along, Across)` and static `FormationSlots.For(formation, SquadDefinition, interval)`: each
+  member's slot relative to the RJ before compression, in formation order (across positive to the left).
+- `Simulation.SlotOf(unitId)`: the member's current slot on the map, or null when it is not following.
+- orders `SetSquadFormation(SquadFormation)` (leader only) and `Rejoin` (members only).
+- `UnitActivity.WaitingForSquad`.
+- events `FormationChanged(Time, AgentId = leader, SquadId, Formation)`; `SquadFormed` gains `Formation`;
+  `SquadSnapshot.Formation`, rebuilt by `EventReplay`.
+
+#### S2a tests
+| ID | Test | Checks |
+|---|---|---|
+| FO1 | file and wedge slots (pure) | the layouts above, reference squad |
+| FO1 | members are in their slots once formed up (file, wedge, flat open ground) | within 1 m, while the squad moves straight |
+| FO2 | in file each member walks the leader's path | track within 1 m of the RJ's track after forming up |
+| FO3 | `SetSquadFormation` changes each member's slot when it acts on the command | S1 delays; slots before and after |
+| FO4 | a wedge is compressed to fit a corridor; too narrow gives a file | all slots within `w/2`, gaps ≥ 1 m |
+| FO5 | a slot inside a building is moved toward the route | slot passable, on the line to the route |
+| SM1 | ordering only the RJ moves the squad; all idle in their slots at the end | file and wedge, `MoveThroughCorridor` and `MoveTo` |
+| SM1 | the squad forms up before it moves off | RJ waits until all are within 5 m |
+| SM2 | no member leaves the outer limit or crosses a cliff | trails, L-shaped corridor, a cliff beside the route |
+| SM8 | the leader waits for a member slowed by a bog and moves on when it is back | `WaitingForSquad`, then moving |
+| SM9 | nobody is left behind: a pinned member halts the whole squad; a wounded one is waited for; an out-of-action one halts the squad until casualty care exists | RJ waits at the start; squad arrives with the wounded member in its slot |
+| — | a directly ordered member is detached; `Rejoin` brings it back | squad does not wait, then waits for it |
+| — | invalid orders | `SetSquadFormation` to a non-leader, `Rejoin` to the leader or outside a squad |
+| SQ6 | determinism and replay with squad movement | same log, formation rebuilt from the log |
+| — | any direct order detaches (`DirectOrderTests`) | `FireAt`, `SetPosture`, `CeaseFire`, `Stop`; the squad does not wait for a member ordered to fire |
+| — | edge cases found in review (`SquadMovementEdgeCaseTests`) | a member finds its way round a building to a slot beyond its search window; members hold their ground when the leader falls mid-move |
+
+Files: `tests/Twin.Sim.Tests/Squads/FormationSlotsTests.cs` (pure FO1) and, in `tests/Twin.Scenarios.Tests/Squad/`,
+`SquadMovementTests.cs`, `FormationTests.cs` and `SquadMovementDeterminismTests.cs`. Kit additions: `SpecSquad`
+movement values (`IntervalMeters`, `MinimumGapMeters`, `LeaderSpeedFactor`, `StragglerMeters`, `RegroupMeters`,
+`LocalSearchMeters`, `WedgeStepMeters`) in `SpecSquad.Doctrine`, `SquadSpec.Formation`, `UnitAssertions.HaveActivity`,
+and `SquadMovementAssertions` (`SquadSettled`, `RunUntilSquadSettled`, `ShouldBeInSlot`, `ShouldAllBeInSlots`,
+`OnStraightRoute`).
 
 ### S3: formations
 - FO1 On flat open ground each formation's members are within `1 m` **[PROPOSAL]** of their slots after settling.
@@ -413,6 +566,19 @@ place each fighter with it), `Scenario.ForSquad`, `WithSquad`,
 - Cover-seeking ("move to the nearest cover"): there is no cover model yet; forest attenuation is the only cover.
 - A fortification model (the estimate has a place for it) and direction error in hearing.
 - Anti-tank and other weapon roles.
+
+## Decisions (product owner, 2026-11-18)
+15. **Immediate action needs no leader:** under fire every member does 0003's drill on its own; the RJ then directs
+    fire and manoeuvres the squad. No `TakeCoverAndReturnFire` command.
+16. **Delivery:** the ambush slice (S2a–S2c, S5a–S5b, casualty care (CC, added by decision 18), S6a–S6b, then the
+    ambush acceptance test); file and wedge in S2, the other formations in S3 after the slice; S2, S5 and S6 in full.
+17. **S2a:** 10 m interval in file and wedge, provisional (spacing must become terrain-dependent); compression
+    allowed with lateral gaps of at least 1 m for now; one squad wedge with the point team leader at the apex; a member
+    ordered directly (by any order) is detached until `Rejoin`; compression and unusable slots (FO4, FO5) in S2a.
+18. **Nobody is left behind:** a squad does not move on normally under fire; a pinned member halts the squad, at least
+    its team stays with it. Breaking contact is an option, and the squad's return fire should then free the pinned
+    fighter to move (S6b). The dead are left; the wounded are carried or helped, and casualties are reported to the
+    platoon leader. Casualty care must be implemented (part CC).
 
 ## Decisions (product owner, 2026-11-17)
 1. **Hard boundary:** the RJ asks; its permit covers the whole formation's width and the squad crosses in formation.

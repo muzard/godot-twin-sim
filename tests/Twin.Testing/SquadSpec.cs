@@ -23,10 +23,12 @@ public sealed record SquadMemberSpec(string UnitId, SquadRole Role, string Team,
 /// member's experience.
 /// </summary>
 /// <param name="Id">The squad's id.</param>
-/// <param name="Teams">The team names, in formation order.</param>
+/// <param name="Teams">The team names.</param>
 /// <param name="Members">The members, in squad order.</param>
-public sealed record SquadSpec(string Id, IReadOnlyList<string> Teams, IReadOnlyList<SquadMemberSpec> Members)
+/// <param name="Formation">The formation the squad starts in (backlog 0004, S2a).</param>
+public sealed record SquadSpec(
+    string Id, IReadOnlyList<string> Teams, IReadOnlyList<SquadMemberSpec> Members, SquadFormation Formation = SquadFormation.File)
 {
     /// <summary>The definition the simulation forms the squad from.</summary>
-    public SquadDefinition Definition => new(Id, Teams, Members.Select(m => m.ToMember()).ToList());
+    public SquadDefinition Definition => new(Id, Teams, Members.Select(m => m.ToMember()).ToList(), Formation);
 }

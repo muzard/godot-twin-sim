@@ -30,12 +30,45 @@ public static class SpecSquad
     /// <summary>A successor takes over a squad or a team 5 s after its leader is out of action.</summary>
     public const double TakeoverSeconds = 5;
 
-    /// <summary>Command delays of backlog 0004: reaction 1 s / 3 s, relay 2 s, takeover 5 s.</summary>
+    /// <summary>
+    /// Distance between neighbours in file and wedge (S2a). ⚠ Provisional: the spacing should depend on the terrain;
+    /// see backlog 0004, "S2a spec decisions".
+    /// </summary>
+    public const double IntervalMeters = 10;
+
+    /// <summary>A compressed formation keeps at least this lateral gap between neighbouring slots, or becomes a file.</summary>
+    public const double MinimumGapMeters = 1;
+
+    /// <summary>The leader moves at this fraction of its speed, so members have a reserve to keep up.</summary>
+    public const double LeaderSpeedFactor = 0.8;
+
+    /// <summary>The leader halts while an able member is farther than this from its slot.</summary>
+    public const double StragglerMeters = 20;
+
+    /// <summary>The leader moves on when every able member is within this of its slot.</summary>
+    public const double RegroupMeters = 5;
+
+    /// <summary>Side of the square window around a member in which it searches a way to its slot.</summary>
+    public const double LocalSearchMeters = 64;
+
+    /// <summary>
+    /// The doctrine of backlog 0004: command delays (reaction 1 s / 3 s, relay 2 s, takeover 5 s) and squad movement
+    /// (10 m interval, 1 m minimum gap, leader at 0.8 ×, halts beyond 20 m, moves on within 5 m, 64 m search window).
+    /// </summary>
     public static SquadDoctrine Doctrine { get; } = new(
         ExperiencedReactionSeconds: ExperiencedReactionSeconds,
         InexperiencedReactionSeconds: InexperiencedReactionSeconds,
         RelaySeconds: RelaySeconds,
-        TakeoverSeconds: TakeoverSeconds);
+        TakeoverSeconds: TakeoverSeconds,
+        IntervalMeters: IntervalMeters,
+        MinimumGapMeters: MinimumGapMeters,
+        LeaderSpeedFactor: LeaderSpeedFactor,
+        StragglerMeters: StragglerMeters,
+        RegroupMeters: RegroupMeters,
+        LocalSearchMeters: LocalSearchMeters);
+
+    /// <summary>The wedge's step back and out between neighbours on an arm: the interval at 45° (7.07 m).</summary>
+    public static double WedgeStepMeters => IntervalMeters / Math.Sqrt(2);
 
     /// <summary>The command team (johtopartio): the squad leader leads it.</summary>
     public const string CommandTeam = "command";
