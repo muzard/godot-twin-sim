@@ -76,7 +76,8 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 fire mode and rounds to `ShotFired`, replaces `SuppressionStarted`'s `until` with `heavy`, and adds
 `ContactDrillStageChanged` and `ContactReported`; replay also rebuilds heavy suppression, the drill stage and waiting
 for orders. Squads (backlog 0004) add `SquadFormed` (with the teams and their first leaders), `CommandIssued`,
-`CommandReceived`, `LeaderChanged` and `TeamLeaderChanged`; replay rebuilds each squad's leader and team leaders. A
+`CommandReceived`, `LeaderChanged`, `TeamLeaderChanged`, `FormationChanged`, `OrderRequested` and `OrderRepeated`;
+replay rebuilds each squad's leader, team leaders and formation. A
 leader's place is empty from its `HealthChanged` to `OutOfAction` until its successor's change event.
 
 To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated

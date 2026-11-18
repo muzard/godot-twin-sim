@@ -146,6 +146,12 @@ public static class EventLog
                 w.WriteString("squad", formation.SquadId);
                 w.WriteString("formation", formation.Formation.ToString());
                 break;
+            case OrderRequested requested:
+                w.WriteString("squad", requested.SquadId);
+                break;
+            case OrderRepeated repeated:
+                w.WriteString("squad", repeated.SquadId);
+                break;
             case CommandIssued issued:
                 w.WriteString("squad", issued.SquadId);
                 w.WriteNumber("commandId", issued.CommandId);
@@ -208,6 +214,8 @@ public static class EventLog
             nameof(PostureChanged) => new PostureChanged(time, agent, Enum.Parse<Posture>(Text(j, "posture"))),
             nameof(SquadFormed) => new SquadFormed(time, agent, Text(j, "squad"), Strings(j, "teams"), Strings(j, "teamLeaders"),
                 j.TryGetProperty("formation", out var formed) ? Enum.Parse<SquadFormation>(formed.GetString() ?? string.Empty) : SquadFormation.File),
+            nameof(OrderRequested) => new OrderRequested(time, agent, Text(j, "squad")),
+            nameof(OrderRepeated) => new OrderRepeated(time, agent, Text(j, "squad")),
             nameof(FormationChanged) => new FormationChanged(time, agent, Text(j, "squad"), Enum.Parse<SquadFormation>(Text(j, "formation"))),
             nameof(CommandIssued) => new CommandIssued(time, agent, Text(j, "squad"), j.GetProperty("commandId").GetInt32(), Text(j, "command")),
             nameof(CommandReceived) => new CommandReceived(time, agent, j.GetProperty("commandId").GetInt32()),

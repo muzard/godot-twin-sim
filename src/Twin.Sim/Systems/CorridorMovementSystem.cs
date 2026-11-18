@@ -57,6 +57,11 @@ public sealed class CorridorMovementSystem : ISimSystem
             if (unit.CorridorProgress is not { } progress || !ReferenceEquals(progress.Order, order))
             {
                 progress = new CorridorProgress(order);
+                if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+                {
+                    progress.Permits.AddRange(squad.Permits); // a squad leader carries the squad's permits (S2b)
+                }
+
                 unit.CorridorProgress = progress;
                 Plan(simulation, world, unit, profile, progress);
             }
@@ -97,6 +102,11 @@ public sealed class CorridorMovementSystem : ISimSystem
             if (leader.Answer == LeaderAnswer.Grant)
             {
                 progress.Permits.Add(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters));
+                if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
+                {
+                    // The permit covers the squad's formation (backlog 0004, S2b).
+                    squad.AddPermit(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters + progress.SquadHalfWidth));
+                }
             }
             else
             {
@@ -143,6 +153,11 @@ public sealed class CorridorMovementSystem : ISimSystem
                 progress.State = CorridorState.Waiting;
                 progress.Request = crossing;
                 progress.RequestedAt = simulation.TimeSeconds;
+                if (simulation.SquadOf(unit.Id) is { } led && led.LeaderId == unit.Id)
+                {
+                    progress.SquadHalfWidth = SquadSlots.HalfWidth(simulation, led); // the permit will cover this width
+                }
+
                 CombatQueries.SetActivity(unit, UnitActivity.WaitingForPermission);
                 simulation.Log(new PermissionRequested(simulation.TimeSeconds, unit.Id, crossing.BoundaryId, crossing.At));
                 return;
@@ -263,6 +278,9 @@ internal sealed class CorridorProgress(MoveThroughCorridor order)
     public BoundaryCrossing? Request { get; set; }
 
     public double RequestedAt { get; set; }
+
+    /// <summary>A squad leader's formation half-width when it asked: a grant covers the squad within radius plus this.</summary>
+    public double SquadHalfWidth { get; set; }
 
     public List<Vec2> Route { get; set; } = [];
 

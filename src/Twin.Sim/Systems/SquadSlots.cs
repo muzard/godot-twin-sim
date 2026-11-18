@@ -63,7 +63,7 @@ internal static class SquadSlots
             var (along, across) = tables[squad.FormationOf(member.UnitId)][member.UnitId];
             var unit = simulation.GetUnit(member.UnitId);
             var onPath = OnPathUsable(simulation, unit, corridor, path, leaderAt, along, out var direction);
-            var slot = onPath + (Left(direction) * across);
+            var slot = TuckIn(simulation, squad, onPath, onPath + (Left(direction) * across));
             slots.Add(member.UnitId, Usable(simulation, unit, corridor, slot, onPath));
         }
 
@@ -131,7 +131,7 @@ internal static class SquadSlots
         Append(path, here);
         leaderAt = Length(path);
         var reach = 0.0;
-        foreach (var point in RouteAhead(leader))
+        foreach (var point in RouteAhead(leader, knowsDirection: path.Count >= 2))
         {
             if (reach > aheadMeters)
             {
@@ -145,16 +145,23 @@ internal static class SquadSlots
         return path;
     }
 
-    /// <summary>Where the leader is going: its planned corridor route, or the destination of its order.</summary>
-    private static IEnumerable<Vec2> RouteAhead(Unit leader)
+    /// <summary>
+    /// Where the leader is going: its planned corridor route, or the destination of a plain move. While a corridor order
+    /// is not moving (waiting for permission, blocked) nothing lies ahead, so the formation keeps facing the way it came,
+    /// or holds if it has no direction (S2b); only before the order is planned does a squad with no direction yet face
+    /// the destination.
+    /// </summary>
+    private static IEnumerable<Vec2> RouteAhead(Unit leader, bool knowsDirection)
     {
         switch (leader.CurrentOrder)
         {
             case MoveThroughCorridor order when leader.CorridorProgress is { Route.Count: > 0 } progress &&
                 ReferenceEquals(progress.Order, order) && progress.State == CorridorState.Moving:
                 return progress.Route.Skip(progress.Next);
+            case MoveThroughCorridor order when leader.CorridorProgress is { } progress && ReferenceEquals(progress.Order, order):
+                return []; // planned, but waiting for permission or blocked: the squad halts as it stands
             case MoveThroughCorridor order:
-                return [order.Destination];
+                return knowsDirection ? [] : [order.Destination]; // not planned yet
             case MoveTo move:
                 return [move.Destination];
             default:
@@ -295,6 +302,47 @@ internal static class SquadSlots
         return simulation.Terrain is not IWorldQuery world || member.Profile is not { } profile ||
             profile.BaseSpeed(world.ClassAt(point.X, point.Y)) > 0;
     }
+
+    /// <summary>
+    /// A slot across an unpermitted hard boundary from its point on the leader's path moves toward that point, to the
+    /// nearest point on the path's side (S2b: tucking in; several such members make a double file along the boundary).
+    /// </summary>
+    private static Vec2 TuckIn(Simulation simulation, Squad squad, Vec2 onPath, Vec2 slot)
+    {
+        if (!CrossesUnpermitted(simulation, squad, onPath, slot))
+        {
+            return slot;
+        }
+
+        var steps = (int)Math.Ceiling(slot.DistanceTo(onPath) / SearchStepMeters);
+        for (var i = 1; i < steps; i++)
+        {
+            var point = slot + ((onPath - slot) * ((double)i / steps));
+            if (!CrossesUnpermitted(simulation, squad, onPath, point))
+            {
+                return point;
+            }
+        }
+
+        return onPath;
+    }
+
+    /// <summary>
+    /// True if the move a–b crosses a hard boundary of the squad's corridor, or leaves the forest, where none of the
+    /// squad's permits covers it. A squad on a plain move (no corridor) has no hard boundaries.
+    /// </summary>
+    internal static bool CrossesUnpermitted(Simulation simulation, Squad squad, Vec2 a, Vec2 b) =>
+        FirstUnpermittedCrossing(simulation, squad, [a, b]) is not null;
+
+    /// <summary>The first unpermitted crossing along a polyline for this squad, or null (see <see cref="CrossesUnpermitted"/>).</summary>
+    internal static Movement.BoundaryCrossing? FirstUnpermittedCrossing(Simulation simulation, Squad squad, IReadOnlyList<Vec2> points) =>
+        squad.Corridor is { } corridor && simulation.Terrain is IWorldQuery world
+            ? Movement.Pathfinder.FirstUnpermittedCrossing(world, points, corridor, squad.Permits)
+            : null;
+
+    /// <summary>The formation's half-width now: the farthest slot from the axis after compression to the corridor.</summary>
+    internal static double HalfWidth(Simulation simulation, Squad squad) =>
+        Table(squad.Definition, squad.Formation, simulation.Config.SquadDoctrine, squad.Corridor).Values.Max(s => Math.Abs(s.Across));
 
     /// <summary>True if the member is a casualty the squad does not leave: pinned or out of action.</summary>
     public static bool IsCasualty(Unit unit) => unit.Health is Health.Pinned or Health.OutOfAction;

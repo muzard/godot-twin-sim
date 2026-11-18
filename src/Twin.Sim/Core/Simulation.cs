@@ -248,6 +248,12 @@ public sealed class Simulation
                 detachedFrom.Detach(unitId); // any order straight to a member takes it out of the squad's movement
             }
 
+            if (order is not (SetPosture or SetSquadPosture or SetSquadFormation) && SquadOf(unitId) is { } waiting &&
+                waiting.LeaderId == unitId)
+            {
+                waiting.OrderRequestedAt = null; // an order of its own replaces asking for the old one
+            }
+
             switch (order)
             {
                 case SetPosture posture:
@@ -277,6 +283,13 @@ public sealed class Simulation
                 default:
                     CombatQueries.EndOrder(unit);
                     unit.CurrentOrder = order;
+                    if (order is MoveTo or MoveThroughCorridor && SquadOf(unitId) is { } led && led.LeaderId == unitId)
+                    {
+                        led.StartAfresh();
+                        led.NewMovementOrder(order, unitId);
+                        SquadSystem.Command(this, led, unit, order); // the leader briefs its squad (backlog 0004, S2b)
+                    }
+
                     break;
             }
         }
@@ -557,6 +570,23 @@ public sealed class Simulation
                 hash.Add(squad.IsFollowing(member.UnitId) ? 1 : 0);
             }
 
+            hash.Add(squad.Permits.Count);
+            foreach (var permit in squad.Permits)
+            {
+                hash.Add(permit.BoundaryId);
+                hash.Add(permit.At.X);
+                hash.Add(permit.At.Y);
+                hash.Add(permit.Radius);
+            }
+
+            foreach (var id in squad.Knowing.Concat(squad.Refusals))
+            {
+                hash.Add(id);
+            }
+
+            hash.Add(squad.MovementOrder?.ToString() ?? "none");
+            hash.Add(squad.OrderRequestedAt ?? -1);
+            hash.Add(squad.PendingRequest?.ToString() ?? "none");
             foreach (var delivery in squad.Deliveries)
             {
                 hash.Add(delivery.UnitId);
