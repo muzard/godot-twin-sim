@@ -1,6 +1,7 @@
 using Twin.Sim.Combat;
 using Twin.Sim.Command;
 using Twin.Sim.Events;
+using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
 using Twin.Sim.Squads;
 using Twin.Sim.Units;
@@ -25,7 +26,9 @@ namespace Twin.Sim.Systems;
 /// <see cref="SquadDoctrine.SuppressedDelayFactor"/> times slower, a heavily suppressed one
 /// <see cref="SquadDoctrine.HeavilySuppressedDelayFactor"/> times, judged when the command reaches it, when it passes the
 /// command on, or when its takeover starts. A squad posture command that reaches a member in the drill is taken when the
-/// drill ends.
+/// drill ends. The leader distributes the squad's fire (backlog 0004 S5b) on its own, its reaction time after it learns
+/// of a new enemy, or when ordered (<see cref="DirectSquadFire"/>); each member takes its fire area when the command
+/// reaches it.
 /// </summary>
 public sealed class SquadSystem : ISimSystem
 {
@@ -39,6 +42,11 @@ public sealed class SquadSystem : ISimSystem
             FillTeamLeaders(simulation, squad);
             FillLeader(simulation, squad);
             RepeatOrder(simulation, squad);
+            if (squad.FireCommandDue is { } due && simulation.TimeSeconds >= due - CombatQueries.TimeEpsilon && squad.LeaderId is { } leaderId)
+            {
+                squad.FireCommandDue = null; // with the leader's place empty it waits for the successor
+                DistributeFire(simulation, squad, simulation.GetUnit(leaderId)); // on its own, having learned of an enemy (S5b)
+            }
         }
     }
 
@@ -79,6 +87,62 @@ public sealed class SquadSystem : ISimSystem
             // Otherwise the member waits for its team leader to pass the command on, or, with no team leader, the
             // command lapses for it.
         }
+    }
+
+    /// <summary>
+    /// The leader distributes the squad's fire over the enemies it knows of (backlog 0004 S5b): the front spans the bearings
+    /// to them from the leader, widened by <see cref="SquadDoctrine.FrontMarginDegrees"/> on each side; each team gets an
+    /// equal share left to right in the open line's team order, widened by <see cref="SquadDoctrine.TeamShareWidening"/>;
+    /// the machine gunners get the whole front. Nothing happens if the leader knows of no enemy.
+    /// </summary>
+    internal static void DistributeFire(Simulation simulation, Squad squad, Unit leader)
+    {
+        var doctrine = simulation.Config.SquadDoctrine;
+        var here = leader.Position.Xy;
+        var bearings = leader.KnownEnemies.Values.Select(p => p - here).Where(d => d.Length > 1e-9).Select(d => d.Normalized()).ToList();
+        if (bearings.Count == 0)
+        {
+            return;
+        }
+
+        // Signed angles (positive to the left) from the mean direction, so the front never wraps round.
+        var mean = bearings.Aggregate(new Vec2(0, 0), (sum, d) => sum + d);
+        var reference = mean.Length > 1e-9 ? mean.Normalized() : bearings[0];
+        var angles = bearings.Select(d => SignedDegrees(reference, d)).ToList();
+        var left = angles.Max() + doctrine.FrontMarginDegrees;
+        var right = angles.Min() - doctrine.FrontMarginDegrees;
+        var width = left - right;
+        var front = new FireArea(Rotated(reference, (left + right) / 2), width);
+
+        var teams = FormationSlots.LineOrder(squad.Definition).Select(id => squad.Member(id).Team).Distinct().ToList();
+        var share = width / teams.Count;
+        var areas = new SortedDictionary<string, FireArea>(StringComparer.Ordinal);
+        foreach (var member in squad.Members)
+        {
+            if (member.Role == SquadRole.MachineGunner)
+            {
+                areas[member.UnitId] = front;
+                continue;
+            }
+
+            var i = teams.IndexOf(member.Team);
+            var centre = left - ((i + 0.5) * share);
+            areas[member.UnitId] = new FireArea(Rotated(reference, centre), share * (1 + doctrine.TeamShareWidening));
+        }
+
+        squad.Front = front;
+        Command(simulation, squad, leader, new SquadFireDistribution(front, areas));
+    }
+
+    /// <summary>The angle from <paramref name="from"/> to <paramref name="to"/> in degrees, positive counter-clockwise (left).</summary>
+    private static double SignedDegrees(Vec2 from, Vec2 to) =>
+        Math.Atan2((from.X * to.Y) - (from.Y * to.X), from.Dot(to)) * 180 / Math.PI;
+
+    /// <summary><paramref name="direction"/> turned counter-clockwise (left) by <paramref name="degrees"/>.</summary>
+    private static Vec2 Rotated(Vec2 direction, double degrees)
+    {
+        var a = degrees * Math.PI / 180;
+        return new Vec2((direction.X * Math.Cos(a)) - (direction.Y * Math.Sin(a)), (direction.X * Math.Sin(a)) + (direction.Y * Math.Cos(a)));
     }
 
     private static List<string> WaitingForTheirTeamLeader(Simulation simulation, Squad squad, SquadMember teamLeader) =>
@@ -151,6 +215,20 @@ public sealed class SquadSystem : ISimSystem
             case MoveTo or MoveThroughCorridor:
                 squad.Heard(unit.Id, command); // the movement order brief: the member now knows the squad's order
                 break;
+            case SquadFireDistribution distribution:
+                unit.FireArea = distribution.Areas.GetValueOrDefault(unit.Id); // its fire area (S5b)
+                unit.CeasedFire = false;
+                break;
+            case SquadCeaseFire:
+                unit.FireArea = null;
+                unit.CeasedFire = true;
+                if (squad.LeaderId == unit.Id)
+                {
+                    squad.Front = null;
+                    squad.FireCommandDue = null; // a distribution due for a new enemy is called off too
+                }
+
+                break;
             case DeployAtForestEdge when squad.EdgeDeployment is { } line && ReferenceEquals(line.Command, command):
                 line.Acted.Add(unit.Id); // it moves to its spot in the open line (S2c)
                 break;
@@ -208,6 +286,13 @@ public sealed class SquadSystem : ISimSystem
         {
             squad.LeaderId = takesOver;
             simulation.Log(new LeaderChanged(now, takesOver, squad.Id));
+            var newLeader = simulation.GetUnit(takesOver);
+            if (newLeader.KnownEnemies.Count > 0 && newLeader.Combatant!.Rules != RulesOfEngagement.HoldFire)
+            {
+                // A successor that knows of enemies distributes fire its reaction time after taking over (S5b).
+                squad.FireCommandDue = now + simulation.Config.SquadDoctrine.ReactionSeconds(newLeader.Combatant.Experience);
+            }
+
             if (squad.MovementOrder is { } order)
             {
                 if (squad.KnowsOrder(takesOver))

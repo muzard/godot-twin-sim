@@ -185,7 +185,8 @@ public sealed class Simulation
 
     /// <summary>
     /// Issues an order. It is validated immediately and takes effect at the start of the next tick.
-    /// A new order replaces the unit's current order, except <see cref="SetPosture"/>, <see cref="SetSquadPosture"/> and
+    /// A new order replaces the unit's current order, except <see cref="SetPosture"/>, <see cref="SetSquadPosture"/>,
+    /// <see cref="DirectSquadFire"/>, <see cref="SquadCeaseFire"/> and
     /// <see cref="CeaseFire"/>, which keep it (<see cref="CeaseFire"/> ends only a <see cref="FireAt"/>). <see cref="Stop"/>
     /// ends the current order and leaves the unit idle where it is, with no current order. Squad orders go only to a
     /// squad's leader. Units out of action take no orders.
@@ -214,7 +215,8 @@ public sealed class Simulation
             throw new OrderRejectedException($"Unit '{unitId}' is not a fighter.");
         }
 
-        if (order is SetSquadPosture or SetSquadFormation or ResumeMovement && SquadOf(unitId)?.LeaderId != unitId)
+        if (order is SetSquadPosture or SetSquadFormation or ResumeMovement or DirectSquadFire or SquadCeaseFire &&
+            SquadOf(unitId)?.LeaderId != unitId)
         {
             throw new OrderRejectedException($"Unit '{unitId}' does not lead a squad.");
         }
@@ -255,7 +257,8 @@ public sealed class Simulation
         foreach (var (unitId, order) in _pendingOrders)
         {
             var unit = _units[unitId];
-            if (order is not (SetPosture or SetSquadPosture) && !(order is Rejoin && SquadOf(unitId)?.IsFollowing(unitId) == true))
+            if (order is not (SetPosture or SetSquadPosture or DirectSquadFire or SquadCeaseFire) &&
+                !(order is Rejoin && SquadOf(unitId)?.IsFollowing(unitId) == true))
             {
                 ContactDrillSystem.End(this, unit);    // any new order ends the drill under fire
                 ContactDrillSystem.Answer(unit);       // and the leader's order stands against the fire it answers
@@ -266,7 +269,8 @@ public sealed class Simulation
                 detachedFrom.Detach(unitId); // any order straight to a member takes it out of the squad's movement
             }
 
-            if (order is not (SetPosture or SetSquadPosture or SetSquadFormation) && SquadOf(unitId) is { } waiting &&
+            if (order is not (SetPosture or SetSquadPosture or SetSquadFormation or DirectSquadFire or SquadCeaseFire) &&
+                SquadOf(unitId) is { } waiting &&
                 waiting.LeaderId == unitId)
             {
                 waiting.OrderRequestedAt = null; // an order of its own replaces asking for the old one
@@ -288,6 +292,14 @@ public sealed class Simulation
                     SquadSystem.Command(this, squad, unit, order); // keeps the current order
                     break;
                 case SetSquadPosture or SetSquadFormation:
+                    break; // the unit lost command of its squad after the order was issued
+                case DirectSquadFire when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
+                    SquadSystem.DistributeFire(this, squad, unit); // keeps the current order (S5b)
+                    break;
+                case SquadCeaseFire when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
+                    SquadSystem.Command(this, squad, unit, order); // keeps the current order (S5b)
+                    break;
+                case DirectSquadFire or SquadCeaseFire:
                     break; // the unit lost command of its squad after the order was issued
                 case ResumeMovement when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
                     SquadAlerts.Resume(this, squad, unit);
@@ -620,6 +632,10 @@ public sealed class Simulation
             hash.Add(unit.Heading.Y);
             hash.Add(unit.KnowsHeavyMachineGun ? 1 : 0);
             hash.Add(unit.PostureAfterDrill is { } after ? (long)after : -1);
+            hash.Add(unit.CeasedFire ? 1 : 0);
+            hash.Add(unit.FireArea is { } area ? area.Centre.X : double.NaN);
+            hash.Add(unit.FireArea is { } areaY ? areaY.Centre.Y : double.NaN);
+            hash.Add(unit.FireArea?.WidthDegrees ?? -1);
         }
 
         foreach (var squad in _squads.Values)
@@ -654,6 +670,10 @@ public sealed class Simulation
 
             hash.Add(squad.EnemyEstimate.Fighters);
             hash.Add(squad.EnemyEstimate.HeavyMachineGun ? 1 : 0);
+            hash.Add(squad.Front is { } front ? front.Centre.X : double.NaN);
+            hash.Add(squad.Front is { } frontY ? frontY.Centre.Y : double.NaN);
+            hash.Add(squad.Front?.WidthDegrees ?? -1);
+            hash.Add(squad.FireCommandDue ?? -1);
 
             foreach (var enemyId in squad.HaltedFor)
             {

@@ -86,3 +86,19 @@ public sealed record Watch(Vec2 Direction) : Order;
 /// halt. Accepted only by the leader of a squad; changes nothing for a squad that is not halted.
 /// </summary>
 public sealed record ResumeMovement : Order;
+
+/// <summary>
+/// A squad order (backlog 0004 S5b): the squad leader distributes the squad's fire over the enemies it knows of. Its front
+/// spans the bearings to them, widened on each side (<see cref="Squads.SquadDoctrine.FrontMarginDegrees"/>); each team
+/// gets an equal share left to right, widened so neighbours overlap, and the machine gunner the whole front. Each member
+/// takes its fire area when the command reaches it. The leader gives it on its own when it learns of a new enemy; given
+/// from outside it distributes fire the same way. Accepted only by the leader of a squad; the leader keeps its order.
+/// </summary>
+public sealed record DirectSquadFire : Order;
+
+/// <summary>
+/// A squad order (backlog 0004 S5b): the squad leader ends the fire distribution. Members drop their fire areas when the
+/// command reaches them and fire only back at their own attackers until a new distribution. Accepted only by the leader
+/// of a squad; the leader keeps its order.
+/// </summary>
+public sealed record SquadCeaseFire : Order;

@@ -134,16 +134,19 @@ public sealed class Scenario
     /// Places every member of <paramref name="squad"/> as a fighter (as <see cref="WithFighter"/>) with its experience,
     /// and forms the squad from them when the scenario is built. Members stand in a row, <see cref="SquadSpacingMeters"/>
     /// apart, eastward from <paramref name="at"/> in member order. They hold fire unless <paramref name="rules"/> says
-    /// otherwise, so a test's shooting stays under its own control.
+    /// otherwise, so a test's shooting stays under its own control. Each member carries the <see cref="SpecShooting.Rifle"/>
+    /// unless <paramref name="weapons"/> gives it another (backlog 0004 S5b: a machine gun for the machine gunner, weapons
+    /// that never hit).
     /// </summary>
     public Scenario WithSquad(
-        SquadSpec squad, Vec2 at, Side side = Side.Blue, RulesOfEngagement rules = RulesOfEngagement.HoldFire)
+        SquadSpec squad, Vec2 at, Side side = Side.Blue, RulesOfEngagement rules = RulesOfEngagement.HoldFire,
+        Func<SquadMemberSpec, WeaponProfile>? weapons = null)
     {
         ArgumentNullException.ThrowIfNull(squad);
         for (var i = 0; i < squad.Members.Count; i++)
         {
             var member = squad.Members[i];
-            WithFighter(member.UnitId, at + new Vec2(i * SquadSpacingMeters, 0), side, rules, experience: member.Experience);
+            WithFighter(member.UnitId, at + new Vec2(i * SquadSpacingMeters, 0), side, rules, weapons?.Invoke(member), experience: member.Experience);
         }
 
         _squads.Add(squad.Definition);
