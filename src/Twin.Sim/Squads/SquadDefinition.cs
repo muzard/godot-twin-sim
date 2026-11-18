@@ -108,6 +108,12 @@ public sealed record SquadDoctrine(
     public static SquadDoctrine Default { get; } = new();
 
     /// <summary>
+    /// A spoken spot report reaches squad mates within this distance (backlog 0004 S5a1). ⚠ A placeholder: how far a
+    /// voice carries must be modelled better later (terrain, background noise, wind, loudness).
+    /// </summary>
+    public double VoiceRangeMeters { get; init; } = 30;
+
+    /// <summary>
     /// True if a fighter with this experience acts on the squad leader's command directly; otherwise it waits for its
     /// team leader to pass the command on.
     /// </summary>
@@ -116,4 +122,11 @@ public sealed record SquadDoctrine(
     /// <summary>The reaction time to a command of a member with the given experience.</summary>
     public double ReactionSeconds(Experience experience) =>
         ActsDirectly(experience) ? ExperiencedReactionSeconds : InexperiencedReactionSeconds;
+}
+
+/// <summary>How a spot report is passed on (backlog 0004 S5a1). Hand signals come in a later ticket.</summary>
+public enum ReportMethod
+{
+    /// <summary>Spoken: heard by squad mates within the voice range.</summary>
+    Voice,
 }

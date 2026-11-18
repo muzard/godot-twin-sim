@@ -118,6 +118,12 @@ public sealed record CombatRules(
     /// </summary>
     public Doctrine Doctrine { get; init; } = Doctrine.Default;
 
+    /// <summary>
+    /// How fighters spot enemies (backlog 0004 S5a1); <see cref="ObservationRules.Off"/> for the instant, all-round sight
+    /// of backlogs 0002 and 0003.
+    /// </summary>
+    public ObservationRules Observation { get; init; } = ObservationRules.Default;
+
     /// <summary>The values of a posture.</summary>
     public PostureValues For(Posture posture) => posture switch
     {

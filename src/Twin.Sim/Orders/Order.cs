@@ -72,3 +72,17 @@ public sealed record SetSquadFormation(Squads.SquadFormation Formation) : Order;
 /// outside a squad; accepted for a member already following, where it changes nothing.
 /// </summary>
 public sealed record Rejoin : Order;
+
+/// <summary>
+/// Watch toward a direction (tähystä suuntaan; backlog 0004 S5a1): the agent stops, as with <see cref="Stop"/>, and
+/// watches <paramref name="Direction"/> (any length) until something else turns it. Rejected for a zero direction.
+/// </summary>
+/// <param name="Direction">Where to watch, in map coordinates.</param>
+public sealed record Watch(Vec2 Direction) : Order;
+
+/// <summary>
+/// A squad order (backlog 0004 S5a1): a squad halted on a spotted enemy moves on. The leader takes up its suspended
+/// movement order; every member learns of the enemies the leader knows and takes back the posture it had before the
+/// halt. Accepted only by the leader of a squad; changes nothing for a squad that is not halted.
+/// </summary>
+public sealed record ResumeMovement : Order;

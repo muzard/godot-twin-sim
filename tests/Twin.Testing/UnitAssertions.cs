@@ -117,6 +117,19 @@ public sealed class UnitAssertions
         Check(_unit.Activity == expected, $"to have activity {expected}");
 
     /// <summary>
+    /// The unit watches toward <paramref name="direction"/> (any length), within <paramref name="toleranceDegrees"/>
+    /// (backlog 0004 S5a1).
+    /// </summary>
+    public UnitAssertions BeWatching(Vec2 direction, double toleranceDegrees = 1)
+    {
+        var watch = _unit.WatchDirection.Normalized();
+        var cos = Math.Clamp(watch.Dot(direction.Normalized()), -1, 1);
+        var off = Math.Acos(cos) * 180 / Math.PI;
+        return Check(off <= toleranceDegrees,
+            $"to watch toward {direction} (±{toleranceDegrees}°), but it watches toward {_unit.WatchDirection}, {off:0.#}° off");
+    }
+
+    /// <summary>
     /// One of the unit's observation sectors (backlog 0004, S2c) covers the map direction <paramref name="direction"/>
     /// (edges included).
     /// </summary>

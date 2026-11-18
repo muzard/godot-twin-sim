@@ -87,7 +87,8 @@ public sealed class CombatStatusSystem : ISimSystem
 /// <summary>
 /// Firing (backlogs 0002 and 0003). Each combatant that can shoot picks a target: the target of its <see cref="FireAt"/>
 /// order; in the drill under fire, the nearest visible attacker (snap shots first, then aimed); otherwise, under its
-/// rules of engagement, the nearest visible agent that shot at it, or (free fire) the nearest visible enemy. It never
+/// rules of engagement, the nearest visible agent that shot at it, or (free fire) the nearest visible enemy. Only an enemy
+/// the shooter has spotted itself is a target (backlog 0004 S5a1; while spotting is on, an ordered target too). It never
 /// fires with an own fighter in its fire sector, nor while heavily suppressed, and fire without an order keeps a reserve
 /// of rounds. Every shot is heard within the weapon's sound range, shows a muzzle flash, and adds fire pressure to its
 /// target and to anyone its rounds pass close by; a round passing within the under-fire distance starts the drill of an
@@ -208,6 +209,7 @@ public sealed class FireSystem : ISimSystem
     private static bool Engageable(Simulation simulation, Unit shooter, Unit target) =>
         target != shooter && target.Combatant is { } other && other.Side != shooter.Combatant!.Side &&
         target.Health != Health.OutOfAction &&
+        CombatQueries.HasSpotted(simulation, shooter, target) &&
         shooter.EyePosition.DistanceTo(target.AimPoint) <= shooter.Combatant.Weapon.MaxRangeMeters &&
         CombatQueries.SectorClear(simulation, shooter, shooter.Position.Xy, target.Position.Xy) &&
         CombatQueries.Sees(simulation, shooter, target); // the sector first: it is far cheaper than a sight line
@@ -356,6 +358,19 @@ internal static class CombatQueries
         simulation.Terrain is IWorldQuery world
             ? LineOfSight.Between(world, observer.EyePosition, target.AimPoint, simulation.Config.Combat)
             : new SightLine(false, 0);
+
+    /// <summary>
+    /// True if the shooter has spotted the target itself (backlog 0004 S5a1), the only enemies it fires at; always true
+    /// while spotting is off (<see cref="ObservationRules.Off"/>).
+    /// </summary>
+    public static bool HasSpotted(Simulation simulation, Unit shooter, Unit target) =>
+        simulation.Config.Combat.Observation.IsOff || shooter.Spotted.Contains(target.Id);
+
+    /// <summary>
+    /// True if the agent knows of the enemy (backlog 0004 S5a1): spotted or reported; while spotting is off, if it sees it.
+    /// </summary>
+    public static bool Knows(Simulation simulation, Unit agent, Unit enemy) =>
+        simulation.Config.Combat.Observation.IsOff ? Sees(simulation, agent, enemy) : agent.KnownEnemies.ContainsKey(enemy.Id);
 
     /// <summary>True if the observer sees the target, counting the target's muzzle flash.</summary>
     public static bool Sees(Simulation simulation, Unit observer, Unit target) =>

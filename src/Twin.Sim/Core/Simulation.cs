@@ -39,7 +39,8 @@ public sealed class Simulation
         _systems =
         [
             new CombatStatusSystem(), new SquadFollowSystem(), new SquadCohesionSystem(), new MovementSystem(),
-            new CorridorMovementSystem(), new ContactDrillSystem(), new FireSystem(), new SquadSystem(), new ObservationSystem(),
+            new CorridorMovementSystem(), new ContactDrillSystem(), new SpottingSystem(), new SpotReportSystem(),
+            new FireSystem(), new SquadSystem(), new ObservationSystem(),
         ];
     }
 
@@ -140,6 +141,12 @@ public sealed class Simulation
     public bool CanSee(string observerId, string targetId) => CombatQueries.Sees(this, GetUnit(observerId), GetUnit(targetId));
 
     /// <summary>
+    /// True if <paramref name="agentId"/> knows of <paramref name="enemyId"/> (backlog 0004 S5a1): it has spotted it, heard
+    /// it reported, or learned of it from its leader. While spotting is off (<see cref="ObservationRules.Off"/>), if it sees it.
+    /// </summary>
+    public bool KnowsOf(string agentId, string enemyId) => CombatQueries.Knows(this, GetUnit(agentId), GetUnit(enemyId));
+
+    /// <summary>
     /// The nearest cover for an agent against the given attackers (backlog 0003): a point within the drill's search
     /// distance, reachable without crossing a hard boundary of its corridor order, where no attacker can see it lying
     /// prone. Null if there is none.
@@ -164,7 +171,10 @@ public sealed class Simulation
                 u.IsHeavilySuppressed, u.DrillStage, u.IsAwaitingOrders))
             .ToList())
         {
-            Squads = _squads.Values.Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds], s.Formation)).ToList(),
+            Squads = _squads.Values
+                .Select(s => new SquadSnapshot(s.Id, s.LeaderId, [.. s.TeamLeaderIds], s.Formation, s.IsHalted)).ToList(),
+            KnownEnemies = _units.Values
+                .SelectMany(u => u.KnownEnemies.Select(k => new KnownEnemySnapshot(u.Id, k.Key, k.Value))).ToList(),
         };
 
     /// <summary>Gets a unit by id.</summary>
@@ -202,7 +212,7 @@ public sealed class Simulation
             throw new OrderRejectedException($"Unit '{unitId}' is not a fighter.");
         }
 
-        if (order is SetSquadPosture or SetSquadFormation && SquadOf(unitId)?.LeaderId != unitId)
+        if (order is SetSquadPosture or SetSquadFormation or ResumeMovement && SquadOf(unitId)?.LeaderId != unitId)
         {
             throw new OrderRejectedException($"Unit '{unitId}' does not lead a squad.");
         }
@@ -215,6 +225,12 @@ public sealed class Simulation
         if (order is Rejoin && (SquadOf(unitId) is not { } own || own.LeaderId == unitId))
         {
             throw new OrderRejectedException($"Unit '{unitId}' is not a squad member who could rejoin its squad.");
+        }
+
+        if (order is Watch { Direction: var direction } &&
+            (!double.IsFinite(direction.X) || !double.IsFinite(direction.Y) || direction.Length <= 1e-9))
+        {
+            throw new OrderRejectedException($"A watch order needs a finite direction, not {direction}.");
         }
 
         if (order is MoveTo move && !Terrain.Contains(move.Destination))
@@ -266,25 +282,36 @@ public sealed class Simulation
                     }
 
                     break;
-                case Stop:
-                    CombatQueries.EndOrder(unit); // zero velocity, idle, no current order
-                    break;
                 case SetSquadPosture or SetSquadFormation when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
                     SquadSystem.Command(this, squad, unit, order); // keeps the current order
                     break;
                 case SetSquadPosture or SetSquadFormation:
                     break; // the unit lost command of its squad after the order was issued
+                case ResumeMovement when SquadOf(unitId) is { } squad && squad.LeaderId == unitId:
+                    SquadAlerts.Resume(this, squad, unit);
+                    break;
+                case ResumeMovement:
+                    break; // the unit lost command of its squad after the order was issued
                 case Rejoin when SquadOf(unitId) is { } squad && !squad.IsFollowing(unitId):
                     CombatQueries.EndOrder(unit);
+                    StandDown(unit);
                     squad.Rejoin(unitId);
                     break;
                 case Rejoin:
                     break; // already following
+                case Watch watch:
+                    CombatQueries.EndOrder(unit); // stops, as with Stop
+                    StandDown(unit);
+                    unit.WatchDirection = watch.Direction.Normalized();
+                    unit.HoldsWatch = true;
+                    break;
                 default:
                     CombatQueries.EndOrder(unit);
-                    unit.CurrentOrder = order;
+                    StandDown(unit);
+                    unit.CurrentOrder = order is Stop ? null : order;
                     if (order is MoveTo or MoveThroughCorridor && SquadOf(unitId) is { } led && led.LeaderId == unitId)
                     {
+                        SquadAlerts.Resume(this, led, unit, newOrder: order); // a new movement order ends a halt (S5a1)
                         led.StartAfresh();
                         led.NewMovementOrder(order, unitId);
                         SquadSystem.Command(this, led, unit, order); // the leader briefs its squad (backlog 0004, S2b)
@@ -301,6 +328,17 @@ public sealed class Simulation
         }
 
         LogStateChanges();
+    }
+
+    /// <summary>
+    /// A new order for the unit itself ends what it did on knowing of an enemy (backlog 0004 S5a1): it no longer stands
+    /// still for it nor watches it.
+    /// </summary>
+    private static void StandDown(Unit unit)
+    {
+        unit.IsAlerted = false;
+        unit.WatchTarget = null;
+        unit.HoldsWatch = false;
     }
 
     /// <summary>Adds an event to the log. Systems call this; the time is the current simulated time.</summary>
@@ -542,6 +580,29 @@ public sealed class Simulation
             hash.Add(unit.IsAwaitingOrders ? 1 : 0);
             hash.Add(unit.RoundsLeft);
             hash.Add(unit.CurrentOrder?.ToString() ?? "none");
+            hash.Add(unit.WatchDirection.X);
+            hash.Add(unit.WatchDirection.Y);
+            hash.Add(unit.IsAlerted ? 1 : 0);
+            hash.Add(unit.HoldsWatch ? 1 : 0);
+            hash.Add(unit.WatchTarget is { } watchTarget ? watchTarget.X : double.NaN);
+            hash.Add(unit.WatchTarget is { } watchTargetY ? watchTargetY.Y : double.NaN);
+            hash.Add((long)(unit.PostureBeforeAlert ?? (Posture)(-1)));
+            foreach (var enemyId in unit.Spotted.Concat(unit.Reported))
+            {
+                hash.Add(enemyId);
+            }
+            foreach (var (enemyId, progress) in unit.SpotProgress)
+            {
+                hash.Add(enemyId);
+                hash.Add(progress);
+            }
+
+            foreach (var (enemyId, position) in unit.KnownEnemies)
+            {
+                hash.Add(enemyId);
+                hash.Add(position.X);
+                hash.Add(position.Y);
+            }
             hash.Add(unit.Heading.X);
             hash.Add(unit.Heading.Y);
         }
@@ -566,6 +627,19 @@ public sealed class Simulation
             }
 
             hash.Add(squad.Corridor is null ? 0 : 1);
+            hash.Add(squad.IsHalted ? 1 : 0);
+            hash.Add(squad.SuspendedOrder?.ToString() ?? "none");
+            foreach (var report in squad.PendingReports)
+            {
+                hash.Add(report.ReporterId);
+                hash.Add(report.EnemyId);
+                hash.Add(report.Due);
+            }
+
+            foreach (var enemyId in squad.HaltedFor)
+            {
+                hash.Add(enemyId);
+            }
             foreach (var member in squad.Members)
             {
                 hash.Add((long)squad.FormationOf(member.UnitId));
