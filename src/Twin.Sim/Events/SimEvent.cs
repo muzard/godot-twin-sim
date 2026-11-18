@@ -145,6 +145,52 @@ public sealed record ContactDrillStageChanged(double Time, string AgentId, Conta
 /// <param name="AttackerPosition">Where that enemy is.</param>
 public sealed record ContactReported(double Time, string AgentId, string AttackerId, Vec2 AttackerPosition) : SimEvent(Time, AgentId);
 
+/// <summary>A squad was formed (backlog 0004).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The squad's leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="Teams">Its team names, in formation order.</param>
+/// <param name="TeamLeaderIds">Each team's leader, in team order.</param>
+public sealed record SquadFormed(
+    double Time, string AgentId, string SquadId, IReadOnlyList<string> Teams, IReadOnlyList<string> TeamLeaderIds)
+    : SimEvent(Time, AgentId);
+
+/// <summary>A squad's leader commanded its squad (backlog 0004). Members act on it later, each logging <see cref="CommandReceived"/>.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="CommandId">Identifies the command in <see cref="CommandReceived"/>; unique in the run.</param>
+/// <param name="Command">The command, in words.</param>
+public sealed record CommandIssued(double Time, string AgentId, string SquadId, int CommandId, string Command) : SimEvent(Time, AgentId);
+
+/// <summary>A squad member acted on a command: it reached the member and the member's reaction time passed.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The member.</param>
+/// <param name="CommandId">The command (<see cref="CommandIssued.CommandId"/>).</param>
+public sealed record CommandReceived(double Time, string AgentId, int CommandId) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// A successor took command of a squad whose leader was out of action. (The leader's place is empty from the moment the
+/// leader is out of action, which <see cref="HealthChanged"/> logs.)
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The new leader.</param>
+/// <param name="SquadId">The squad.</param>
+public sealed record LeaderChanged(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
+
+/// <summary>A successor took over a team whose leader was out of action.</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The new team leader.</param>
+/// <param name="SquadId">The squad.</param>
+/// <param name="Team">The team.</param>
+public sealed record TeamLeaderChanged(double Time, string AgentId, string SquadId, string Team) : SimEvent(Time, AgentId);
+
+/// <summary>One squad in a <see cref="WorldSnapshot"/>.</summary>
+/// <param name="Id">The squad.</param>
+/// <param name="LeaderId">Its leader, or null while the place is empty.</param>
+/// <param name="TeamLeaderIds">Each team's leader in team order, null while the place is empty.</param>
+public sealed record SquadSnapshot(string Id, string? LeaderId, IReadOnlyList<string?> TeamLeaderIds);
+
 /// <summary>One agent in a <see cref="WorldSnapshot"/>.</summary>
 /// <param name="Id">The agent.</param>
 /// <param name="Position">Its position.</param>
@@ -163,4 +209,8 @@ public readonly record struct AgentSnapshot(
 /// <summary>The state viewers show: every agent at one moment, ordered by id.</summary>
 /// <param name="TimeSeconds">Simulated time.</param>
 /// <param name="Agents">The agents, ordered by id.</param>
-public sealed record WorldSnapshot(double TimeSeconds, IReadOnlyList<AgentSnapshot> Agents);
+public sealed record WorldSnapshot(double TimeSeconds, IReadOnlyList<AgentSnapshot> Agents)
+{
+    /// <summary>Every squad and who leads it and its teams, ordered by id (backlog 0004).</summary>
+    public IReadOnlyList<SquadSnapshot> Squads { get; init; } = [];
+}

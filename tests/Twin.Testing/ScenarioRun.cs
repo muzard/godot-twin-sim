@@ -1,7 +1,9 @@
 using Twin.Sim;
+using Twin.Sim.Combat;
 using Twin.Sim.Events;
 using Twin.Sim.Geometry;
 using Twin.Sim.Orders;
+using Twin.Sim.Squads;
 using Twin.Sim.Terrain;
 using Twin.Sim.Units;
 
@@ -118,6 +120,43 @@ public sealed class ScenarioRun
     {
         RunUntil(s => s.Events.OfType<ShotFired>().Any(e => e.TargetId == targetId && e.Hit), timeout, $"{targetId} hit");
         return Events.OfType<ShotFired>().First(e => e.TargetId == targetId && e.Hit);
+    }
+
+    /// <summary>Looks up a squad (backlog 0004).</summary>
+    public Squad Squad(string id) => Simulation.GetSquad(id);
+
+    /// <summary>
+    /// Gives a squad order to <paramref name="leaderId"/> and runs the one tick on which it takes effect, so the leader
+    /// commands the squad. Returns the <see cref="CommandIssued"/> event that tick logged; fails if there is none.
+    /// </summary>
+    public CommandIssued Command(string leaderId, Order order)
+    {
+        var before = Events.Count;
+        Order(leaderId, order).Step();
+        return Events.Skip(before).OfType<CommandIssued>().SingleOrDefault(e => e.AgentId == leaderId)
+            ?? throw new ScenarioAssertionException(
+                $"Expected '{leaderId}' to command its squad on the tick after {order}, but it logged no CommandIssued." +
+                $"{Environment.NewLine}{Describe()}");
+    }
+
+    /// <summary>
+    /// Orders <paramref name="shooterId"/> to fire at <paramref name="targetId"/> until the target is out of action (two
+    /// real hits, as in backlog 0002), then orders it to cease fire. Returns the simulated time at which the target went
+    /// out of action. Fails with a diagnostic if that does not happen within <paramref name="timeout"/>.
+    /// </summary>
+    public double RunUntilOutOfAction(string targetId, string shooterId, TimeSpan timeout)
+    {
+        Order(shooterId, new FireAt(targetId));
+        RunUntil(s => s.Unit(targetId).Health == Health.OutOfAction, timeout, $"{targetId} out of action");
+        Order(shooterId, new CeaseFire());
+        return Events.OfType<HealthChanged>().Last(e => e.AgentId == targetId && e.Health == Health.OutOfAction).Time;
+    }
+
+    /// <summary>The moment <paramref name="agentId"/> acted on <paramref name="command"/>, or null if it has not.</summary>
+    public CommandReceived? ReceivedBy(string agentId, CommandIssued command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return Events.OfType<CommandReceived>().FirstOrDefault(e => e.AgentId == agentId && e.CommandId == command.CommandId);
     }
 
     private void RecordTrails()

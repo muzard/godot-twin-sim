@@ -75,7 +75,9 @@ Besides the spec's `PathPlanned`, `PermissionRequested`, `PermissionAnswered`, `
 `SuppressionEnded` and `PostureChanged`; replay rebuilds health, posture and suppression too. Backlog 0003 adds the
 fire mode and rounds to `ShotFired`, replaces `SuppressionStarted`'s `until` with `heavy`, and adds
 `ContactDrillStageChanged` and `ContactReported`; replay also rebuilds heavy suppression, the drill stage and waiting
-for orders.
+for orders. Squads (backlog 0004) add `SquadFormed` (with the teams and their first leaders), `CommandIssued`,
+`CommandReceived`, `LeaderChanged` and `TeamLeaderChanged`; replay rebuilds each squad's leader and team leaders. A
+leader's place is empty from its `HealthChanged` to `OutOfAction` until its successor's change event.
 
 To look at a run, `./dev replay st1` runs the scenario until the agent is idle or blocked (at most 2 h of simulated
 time), writes the log to `replays/st1-Grant.jsonl` (ignored by Git), reads it back and prints every agent's state

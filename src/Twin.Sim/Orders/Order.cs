@@ -49,3 +49,11 @@ public sealed record CeaseFire : Order;
 /// </summary>
 /// <param name="Posture">The posture.</param>
 public sealed record SetPosture(Posture Posture) : Order;
+
+/// <summary>
+/// A squad order (backlog 0004): the squad leader commands its squad to take a posture ("Maahan!"). Accepted only by the
+/// leader of a squad. The leader takes the posture at once; every other member takes it when the command reaches it
+/// (<see cref="Squads.SquadDoctrine"/>). Everyone keeps its current order.
+/// </summary>
+/// <param name="Posture">The posture.</param>
+public sealed record SetSquadPosture(Posture Posture) : Order;
