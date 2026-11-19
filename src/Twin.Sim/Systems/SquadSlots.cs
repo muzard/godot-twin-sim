@@ -379,10 +379,12 @@ internal static class SquadSlots
     /// <summary>
     /// A slot across an unpermitted hard boundary from its point on the leader's path moves toward that point, to the
     /// nearest point on the path's side (S2b: tucking in; several such members make a double file along the boundary).
+    /// So does a slot outside the forest sideways from a point in it, permit or not: the formation narrows to the forest
+    /// rather than a member leaving it sideways (backlog 0004, decided 2026-11-19).
     /// </summary>
     private static Vec2 TuckIn(Simulation simulation, Squad squad, Vec2 onPath, Vec2 slot)
     {
-        if (!CrossesUnpermitted(simulation, squad, onPath, slot))
+        if (!OutOfReach(simulation, squad, onPath, slot))
         {
             return slot;
         }
@@ -391,7 +393,7 @@ internal static class SquadSlots
         for (var i = 1; i < steps; i++)
         {
             var point = slot + ((onPath - slot) * ((double)i / steps));
-            if (!CrossesUnpermitted(simulation, squad, onPath, point))
+            if (!OutOfReach(simulation, squad, onPath, point))
             {
                 return point;
             }
@@ -399,6 +401,20 @@ internal static class SquadSlots
 
         return onPath;
     }
+
+    private static bool OutOfReach(Simulation simulation, Squad squad, Vec2 onPath, Vec2 point) =>
+        CrossesUnpermitted(simulation, squad, onPath, point) || LeavesForestSideways(simulation, squad, onPath, point);
+
+    /// <summary>
+    /// True if the move <paramref name="a"/>–<paramref name="b"/> leaves the forest (from a forest point to a passable
+    /// point of another class, as docs/adr/0009) in a direction more than <see cref="SquadDoctrine.ForwardCrossingDegrees"/>
+    /// from the direction of movement at <paramref name="a"/>.
+    /// </summary>
+    private static bool LeavesForestSideways(Simulation simulation, Squad squad, Vec2 a, Vec2 b) =>
+        squad.Corridor is { } corridor && simulation.Terrain is IWorldQuery world &&
+        world.ClassAt(a.X, a.Y) == TerrainClass.Forest &&
+        world.ClassAt(b.X, b.Y) is not (TerrainClass.Forest or TerrainClass.Water or TerrainClass.Building) &&
+        !corridor.IsForward(a, a, b, simulation.Config.SquadDoctrine.ForwardCrossingDegrees);
 
     /// <summary>
     /// True if the move a–b crosses a hard boundary of the squad's corridor, or leaves the forest, where none of the

@@ -141,7 +141,7 @@ the `squad` section of scenario.json.
   and the whole squad halts while it waits. A permit given to the RJ covers the whole formation: it is valid for every
   member of the squad within `permit radius + the formation's half-width` of the requested point, so the squad crosses
   in formation. The half-width is that of the formation at the time of the request, after any compression to fit the
-  corridor.
+  corridor. (For the forest edge this is replaced by the squad-wide permit, decided 2026-11-19: see below.)
 - **A member reaches the boundary first.** A member whose slot lies beyond an unpermitted boundary (the point man of a
   wedge, for example) stops at the boundary and waits for the squad, without crossing.
 - **Deploying at the forest edge.** When the RJ must ask for permission to leave the forest, the squad first deploys
@@ -544,7 +544,8 @@ Decided with the product owner; S2b was split from the forest-edge deployment (n
   on" is seen as the successor holding the order and waiting for the squad.)
 
 #### API the S2b tests need from `Twin.Sim`
-- `Squad.Permits`: the squad's permits, each with the radius widened by the formation's half-width.
+- `Squad.Permits`: the squad's permits, each with the radius widened by the formation's half-width (a forest-edge
+  permit's radius is infinite since the squad-wide permit, 2026-11-19).
 - `Squad.KnowsOrder(unitId)`: true once the member has acted on the RJ's brief of the current movement order (the RJ
   knows its own order).
 - events `OrderRequested(Time, AgentId = successor, SquadId)` and `OrderRepeated(Time, AgentId = successor, SquadId)`;
@@ -600,7 +601,7 @@ Decided with the product owner.
   deployed: every able (not out of action) member that follows the squad stands in its spot (`EdgeDeployed`, by the RJ).
   At the latest it asks `60 s` **[PROPOSAL]** after its command, without `EdgeDeployed`.
 - **The permit covers the line:** radius plus the line's half-width (the farthest first-line spot from the RJ), as S2b's
-  half-width at the time of the request.
+  half-width at the time of the request. (Replaced 2026-11-19 by the squad-wide forest-edge permit: see below.)
 - **After a grant** the squad crosses and re-forms in its ordered formation in the open; **after a denial** it takes the
   respecting route or reports blocked as in S2b, without leaving the forest.
 
@@ -633,7 +634,7 @@ heading and observation sectors, and seeing does not depend on them yet. Values 
 | SM6 | the RJ asks to leave the forest only once the squad has deployed | `EdgeDeployed`, then `PermissionRequested` for the forest edge in the same step; the command came first; RJ 5 m inside |
 | SM6 | members take their line spots when the deployment command reaches them | S1 delays for k2 (1 s) and k1 (8 s) |
 | SM6 | the RJ asks at the deployment time limit when the line has not formed | a 3 s limit: request 3 s after the command, no `EdgeDeployed` |
-| SM6 | after a grant the squad leaves the forest within the permit and arrives in formation | permit radius 10 + 50 (k2, five intervals right); `RouteAudit` on every trail; slots at B |
+| SM6 | after a grant the squad leaves the forest within the permit and arrives in formation | ~~permit radius 10 + 50~~ the permit covers the whole edge (2026-11-19); `RouteAudit` on every trail; slots at B |
 | SM6 | after a denial with no way round the squad stays in the forest and halts as one | RJ `Blocked`; nobody past the edge; all still |
 | SM6 | members that do not fit the corridor form a second line 10 m deeper | 14 m corridor: k1 and k2 15 m inside, ±5 m about the RJ's axis |
 | SM6 | the line follows a slanted forest edge | 30° edge: every member 5 ± 1.5 m inside, 10 m apart along the edge |
@@ -749,12 +750,67 @@ S5a is delivered in two parts. **S5a1: spotting** (observation, watch sectors, t
 below. **S5a2:** the rest of S5a (UF1, UF5–UF7, WS3: contact by fire up the chain, the enemy estimate, suppression
 slows command, the drill conflicts), built on S5a1's reports.
 
-#### Squad-wide forest-edge permit (decided 2026-11-19; to be specified)
+#### Squad-wide forest-edge permit (decided 2026-11-19; specified and implemented)
 Decided with the product owner after the st1 patrol demo, where the wedge's arms leaving the tree clumps along the road
 asked for permission again and again: **once the squad has a permit to leave the forest, it covers every member's every
 forest-edge crossing for the rest of that order, anywhere in the corridor.** Drawn boundaries (a road, for example) keep
-S2b's rule (radius plus half-width around the requested point). Not yet specified or implemented (it needs the spec
-phase); until then the patrol demos show the repeated requests.
+S2b's rule (radius plus half-width around the requested point). A permit lasts one order, as before.
+
+Tests (`SquadForestPermitTests`, spec 2026-11-19): in file and in wedge, a route that leaves the forest and then a strip
+of trees 120 m on asks once, and the squad's forest-edge permit covers the second edge (fails before the change: the
+leader asks again at the strip); a road permit still covers only radius plus half-width; the forest-edge permit lapses
+with a new order (the last two pass already and guard against widening the change).
+
+Two S2c tests encoded the old rule and were changed with the product owner's approval (2026-11-19): SM6
+(`SquadEdgeDeploymentTests`) now expects the forest-edge permit to cover the whole edge (infinite radius) instead of
+radius plus the line's half-width. `RouteAudit` still checks the members' routes against impassable cells and the
+corridor limits, but given the squad's own infinite permit its forest-edge check can no longer fail. The clearing edge case
+(`SquadEdgeDeploymentEdgeCaseTests`, now `After_a_clearing_on_the_way_the_first_permit_covers_the_far_edge`) expects
+one deployment and one request, at the first edge: the far edge after the clearing is crossed on the same permit.
+
+#### Forward and lateral forest-edge crossings (decided 2026-11-19; specified and implemented)
+Refines the squad-wide permit above, decided with the product owner after review found that a permit a member obtained
+did not reach the leader's own plan:
+- **The squad's permit is its leader's.** A forest-edge permit the squad leader (or a successor that has taken command)
+  holds, whether it asked itself or relayed a member's request, covers every member. Team leaders obtain no permits
+  of their own. A leader that already plans to deploy at an edge takes a covering squad permit into account at once.
+  Rationale: when the leader moves the squad over a field edge, the squad can take that crossing as authorized.
+- ~~**Forward crossings only.** The permit covers crossings in the squad's direction of movement~~ (superseded in
+  implementation, see below; the permit covers every direction, and the angle decides only where slots go): a move out
+  of the forest is sideways when its direction is more than `45°` **[PROPOSAL]** from the corridor centreline's
+  direction at that point.
+- **Lateral crossings are not made.** A member that would leave the forest sideways because the formation is wider than
+  the forest (moving north, crossing the west edge) does not cross and does not ask: it keeps inside the edge and goes
+  round on the forest side, so the formation narrows there.
+
+Tests (`SquadForestPermitEdgeCaseTests`, spec 2026-11-19), on bands of forest 40 m wide with bog (slower than forest)
+on both sides, so the leader's own route keeps to the forest: without a permit, a wedge wider than the band neither asks
+nor leaves it, and comes along to B (passes already: a member keeps inside an edge the squad has no permit for, and
+guards that); with the squad's forest-edge permit from leaving an earlier forest forward, a wedge commanded inside the
+band still does not leave it sideways (fails before the change: k1 walks out into the bog on the permit). Forward
+crossings on the permit stay covered by `SquadForestPermitTests`.
+
+The gap review found (a permit relayed for a member not reaching the leader's plan) cannot arise with the current
+flows, so it has no test: members start to follow only once the leader moves; the leader asks for its drawn boundaries
+from where it stands before it moves; a leader whose route leaves the forest heads for that edge from the start, and no
+member asks to leave the forest meanwhile (S2c); and a new order or a new leader starts from the squad's permits. A
+member's forest-edge permit is therefore only ever asked for while the leader's route has no forest edge of its own.
+
+**How it is implemented (2026-11-19).** The rule acts on the formation, not on the permit: a member's slot that lies
+outside the forest, sideways from its point on the leader's path (the move there leaves the forest more than
+`SquadDoctrine.ForwardCrossingDegrees` = 45° from the corridor centreline's direction), is tucked in toward the path as
+for an unpermitted boundary (S2b), with or without a permit, so the formation narrows to the forest. The permit itself
+keeps covering every forest-edge crossing in any direction. A first version that made the permit forward-only
+deadlocked the st1 acceptance runs: where a forest road runs along the route, members had to step across the road strip
+sideways to reach slots inside the forest on its far side; the permit no longer covered that, there was no way round,
+and the leader waited for them for good. Crossing to a slot inside the forest is not the "formation wider than the
+forest" case, so it stays covered. ⚠ Moving the rule from the permit to the slots was the implementer's call, to be
+confirmed by the product owner. Open, found in review: (a) a slot's offset is always square to the leader's path, so
+while the leader keeps near the centreline the 45° value hardly matters (a slot just outside a slanted forest edge is
+tucked in too, until its path point is out); (b) only slots are kept in the forest, not routes: on the permit a
+member's or the leader's route may still cut out of the forest sideways and back where the land beside it is faster
+(the tests put bog beside the bands); (c) a slot in water or a building is moved inward to the first standable point
+by the older S2b code, which may lie outside the forest.
 
 #### S5b spec decisions (2026-11-19; tests reviewed and implemented)
 Decided with the product owner: before the squad leader distributes fire, members fire at the first enemy they see;

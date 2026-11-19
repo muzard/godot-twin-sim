@@ -125,6 +125,14 @@ public sealed record SquadDoctrine(
     public double VoiceRangeMeters { get; init; } = 30;
 
     /// <summary>
+    /// A move out of the forest more than this many degrees from the direction of movement (the corridor centerline's
+    /// direction there) is sideways: no member's slot is put outside the forest sideways, permit or not, so the formation
+    /// narrows to the forest (backlog 0004, decided 2026-11-19). The squad's forest-edge permit itself covers crossings in
+    /// any direction. **[PROPOSAL]**
+    /// </summary>
+    public double ForwardCrossingDegrees { get; init; } = 45;
+
+    /// <summary>
     /// True if a fighter with this experience acts on the squad leader's command directly; otherwise it waits for its
     /// team leader to pass the command on.
     /// </summary>

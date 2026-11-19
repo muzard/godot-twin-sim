@@ -43,6 +43,44 @@ public sealed record Corridor(
     /// <summary>Distance from the centerline beyond which the corridor ends.</summary>
     public double OuterLimit => (Width / 2) + SoftMargin;
 
+    /// <summary>
+    /// The direction of movement at <paramref name="point"/>: the unit direction of the centerline segment nearest to it
+    /// (the first such segment on a tie); zero for a centerline of a single point.
+    /// </summary>
+    public Vec2 DirectionAt(Vec2 point)
+    {
+        var best = Vec2.Zero;
+        var bestDistance = double.PositiveInfinity;
+        for (var i = 0; i + 1 < Centerline.Count; i++)
+        {
+            var d = Segments.DistanceToSegment(point, Centerline[i], Centerline[i + 1]);
+            if (d < bestDistance && Centerline[i + 1] != Centerline[i])
+            {
+                bestDistance = d;
+                best = (Centerline[i + 1] - Centerline[i]).Normalized();
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// True if the move <paramref name="from"/>–<paramref name="to"/>, crossing at <paramref name="at"/>, is in the direction
+    /// of movement: within <paramref name="degrees"/> of <see cref="DirectionAt"/> there (a move of no length, or a
+    /// centerline of a single point, counts as forward).
+    /// </summary>
+    public bool IsForward(Vec2 at, Vec2 from, Vec2 to, double degrees)
+    {
+        var forward = DirectionAt(at);
+        if (forward == Vec2.Zero || to == from)
+        {
+            return true;
+        }
+
+        var cos = Math.Clamp((to - from).Normalized().Dot(forward), -1, 1);
+        return Math.Acos(cos) * 180 / Math.PI <= degrees + 1e-9;
+    }
+
     /// <summary>Cost factor at distance <paramref name="d"/> from the centerline; infinity beyond the outer limit.</summary>
     public double CostFactor(double d)
     {
@@ -67,7 +105,8 @@ public sealed record Corridor(
 /// </summary>
 /// <param name="BoundaryId">The boundary the permit opens.</param>
 /// <param name="At">The requested crossing point.</param>
-/// <param name="Radius">Radius in meters.</param>
+/// <param name="Radius">Radius in meters; <see cref="double.PositiveInfinity"/> for a squad's permit to leave the forest,
+/// which covers every forest edge for the rest of the order.</param>
 public sealed record CrossingPermit(string BoundaryId, Vec2 At, double Radius)
 {
     /// <summary>True if the permit covers crossing <paramref name="boundaryId"/> at <paramref name="point"/>.</summary>

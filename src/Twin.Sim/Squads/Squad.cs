@@ -90,7 +90,8 @@ public sealed class Squad
     /// <summary>
     /// The squad's permits to cross hard boundaries (backlog 0004, S2b): each granted to the leader, for itself or for a
     /// member, with its radius widened by the formation's half-width when it was asked for, so the squad crosses in
-    /// formation.
+    /// formation. A permit to leave the forest has an infinite radius: it covers every forest edge for the rest of the
+    /// order (decided 2026-11-19). Even so, no slot is put outside the forest sideways (see SquadSlots.TuckIn).
     /// </summary>
     public IReadOnlyList<Corridors.CrossingPermit> Permits => _permits.AsReadOnly();
 
@@ -151,7 +152,17 @@ public sealed class Squad
         }
     }
 
-    internal void AddPermit(Corridors.CrossingPermit permit) => _permits.Add(permit);
+    /// <summary>
+    /// Adds a permit. A permit to leave the forest covers every member's every forest-edge crossing for the rest of the order,
+    /// anywhere in the corridor (decided 2026-11-19); a drawn boundary's keeps its radius.
+    /// </summary>
+    /// <returns>The permit as stored.</returns>
+    internal Corridors.CrossingPermit AddPermit(Corridors.CrossingPermit permit)
+    {
+        var stored = permit.BoundaryId == Corridors.HardBoundary.ForestEdgeId ? permit with { Radius = double.PositiveInfinity } : permit;
+        _permits.Add(stored);
+        return stored;
+    }
 
     /// <summary>True if the squad was refused a member's crossing of the boundary under this order: no one asks again.</summary>
     internal bool WasRefused(string boundaryId) => _refused.Contains(boundaryId);

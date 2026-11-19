@@ -12,7 +12,9 @@ corridor's edge or at every point where a route moves from forest to open ground
 Every forest edge is a hard boundary, everywhere, when an agent **leaves** the forest: any move from a forest cell
 to a passable cell of another class (open, field, road, bog). Entering the forest is free. The boundary is derived from
 the terrain-class layer, needs no drawn line, and has the id `forest-edge` (`HardBoundary.ForestEdgeId`). A permit for it
-is valid within the permit radius of the requested crossing point, measured to the arc's end point. Drawn boundaries
+is valid within the permit radius of the requested crossing point, measured to the arc's end point. (Amended
+2026-11-19, backlog 0004: a squad's forest-edge permit covers every forest edge for the rest of its order, and no
+member's slot is put outside the forest sideways.) Drawn boundaries
 from the order (for example "do not cross the road") are hard boundaries as well, each with its own id.
 
 Reason: in the drone age (and before), a unit should never be caught without overhead concealment unless a leader

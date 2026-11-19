@@ -68,10 +68,11 @@ public class SquadEdgeDeploymentEdgeCaseTests
     }
 
     [Fact]
-    public void After_a_clearing_on_the_way_the_squad_deploys_again_at_the_far_edge()
+    public void After_a_clearing_on_the_way_the_first_permit_covers_the_far_edge()
     {
-        // Forest with a clearing x 200–230 and open land east of x = 330: the squad deploys at x = 200, is granted, crosses
-        // the clearing, and deploys again 5 m inside the edge at x = 330.
+        // Forest with a clearing x 200–230 and open land east of x = 330: the squad deploys at x = 200 and is granted; the
+        // squad-wide forest-edge permit (decided 2026-11-19) covers the far edge at x = 330 too, so the squad neither deploys
+        // nor asks again there.
         var world = TestMap.Create(widthMeters: 500, heightMeters: 200, fill: TerrainClass.Forest)
             .Fill(TerrainClass.Open, 200, 0, 230, 200)
             .Fill(TerrainClass.Open, 330, 0, 500, 200).Build();
@@ -88,12 +89,10 @@ public class SquadEdgeDeploymentEdgeCaseTests
         }, TwentyMinutes, "squad settled at B");
 
         sim.Unit("rj").Should().BeAt(new Vec2(420, 101));
-        Assert.Equal(2, deployedAt.Count);
-        Assert.InRange(deployedAt[0].X, 200 - SpecSquad.EdgeInsetMeters - Tolerance, 200 - SpecSquad.EdgeInsetMeters + Tolerance);
-        Assert.InRange(deployedAt[1].X, 330 - SpecSquad.EdgeInsetMeters - Tolerance, 330 - SpecSquad.EdgeInsetMeters + Tolerance);
-        var requests = sim.Events.OfType<PermissionRequested>().ToList();
-        Assert.All(requests, e => Assert.Equal("rj", e.AgentId));
-        Assert.Equal(2, requests.Count);
+        var deployed = Assert.Single(deployedAt);
+        Assert.InRange(deployed.X, 200 - SpecSquad.EdgeInsetMeters - Tolerance, 200 - SpecSquad.EdgeInsetMeters + Tolerance);
+        var request = Assert.Single(sim.Events.OfType<PermissionRequested>());
+        Assert.Equal("rj", request.AgentId);
     }
 
     [Fact]
