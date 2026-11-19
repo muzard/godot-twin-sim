@@ -17,3 +17,4 @@ New ADRs copy `0000-template.md` and take the next number. Superseded ADRs stay,
 | [0010](0010-cliffs-block-movement-unless-rappelling.md) | Cliffs block movement unless the unit can rappel | Accepted |
 | [0011](0011-shared-harness-submodule.md) | Shared AI harness as a git submodule | Superseded by 0012 |
 | [0012](0012-shared-harness-as-plugin-and-clone.md) | Shared team knowledge through a plugin and a personal clone | Accepted |
+| [0013](0013-client-web-or-game-engine.md) | Client: a web application, a game engine, or both | Proposed |
