@@ -18,3 +18,4 @@ New ADRs copy `0000-template.md` and take the next number. Superseded ADRs stay,
 | [0011](0011-shared-harness-submodule.md) | Shared AI harness as a git submodule | Superseded by 0012 |
 | [0012](0012-shared-harness-as-plugin-and-clone.md) | Shared team knowledge through a plugin and a personal clone | Accepted |
 | [0013](0013-client-web-or-game-engine.md) | Client: a web application, a game engine, or both | Proposed |
+| [0014](0014-simulation-language-csharp-rust-for-hotspots.md) | Simulation in C#; port proven hotspots to Rust | Accepted |
