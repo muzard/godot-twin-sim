@@ -41,7 +41,7 @@ public sealed class Simulation
         [
             new CombatStatusSystem(), new SquadFollowSystem(), new SquadCohesionSystem(), new MovementSystem(),
             new CorridorMovementSystem(), new ContactDrillSystem(), new SpottingSystem(), new SpotReportSystem(),
-            new FireSystem(), new SquadSystem(), new ObservationSystem(),
+            new FireSystem(), new SquadSystem(), new FiringPositionSystem(), new ObservationSystem(),
         ];
     }
 
@@ -161,6 +161,17 @@ public sealed class Simulation
     /// </summary>
     public Vec2? FindFiringPosition(string agentId, params string[] attackerIds) =>
         Destination(CoverSearch.FiringPosition(this, GetUnit(agentId), Fighters(attackerIds)));
+
+    /// <summary>
+    /// The best firing position for an agent against an enemy within <paramref name="radiusMeters"/> (backlog 0005): the
+    /// highest-scoring point from which it sees the enemy when crouching, in range, with a clear fire sector, reachable
+    /// without an unpermitted crossing. Null if there is none.
+    /// </summary>
+    public Vec2? FindBestFiringPosition(string agentId, string enemyId, double radiusMeters)
+    {
+        var enemy = GetUnit(enemyId);
+        return Destination(FiringPositionSearch.Best(this, GetUnit(agentId), [new FiringPositionSearch.Target(enemy, enemy.Position.Xy)], radiusMeters));
+    }
 
     /// <summary>
     /// Every agent's position, activity, health, posture, suppression and drill stage now, ordered by id: what a live
@@ -636,6 +647,17 @@ public sealed class Simulation
             hash.Add(unit.FireArea is { } area ? area.Centre.X : double.NaN);
             hash.Add(unit.FireArea is { } areaY ? areaY.Centre.Y : double.NaN);
             hash.Add(unit.FireArea?.WidthDegrees ?? -1);
+            hash.Add(unit.FiringRoute?.Count ?? -1);
+            foreach (var point in unit.FiringRoute ?? [])
+            {
+                hash.Add(point.X);
+                hash.Add(point.Y);
+            }
+
+            hash.Add(unit.FiringRouteNext);
+            hash.Add(unit.HoldsFiringPosition ? 1 : 0);
+            hash.Add(unit.CannotFireSince ?? -1);
+            hash.Add(unit.ReportedCannotFire is { } reported ? reported.Enemies : -1);
         }
 
         foreach (var squad in _squads.Values)
@@ -674,6 +696,16 @@ public sealed class Simulation
             hash.Add(squad.Front is { } frontY ? frontY.Centre.Y : double.NaN);
             hash.Add(squad.Front?.WidthDegrees ?? -1);
             hash.Add(squad.FireCommandDue ?? -1);
+            foreach (var (team, firing) in squad.TeamFiring)
+            {
+                hash.Add(team);
+                hash.Add(firing.DecideAt ?? -1);
+                hash.Add(firing.AnswerAt ?? -1);
+                hash.Add(firing.MoveAt ?? -1);
+                hash.Add(firing.SquadLeaderSearchAt ?? -1);
+                hash.Add(firing.Move?.ToString() ?? "none");
+                hash.Add(firing.Exhausted ? 1 : 0);
+            }
 
             foreach (var enemyId in squad.HaltedFor)
             {

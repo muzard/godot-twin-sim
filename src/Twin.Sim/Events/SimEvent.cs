@@ -256,6 +256,31 @@ public sealed record SquadHalted(double Time, string AgentId, string SquadId, st
 public sealed record SquadResumed(double Time, string AgentId, string SquadId) : SimEvent(Time, AgentId);
 
 /// <summary>
+/// A squad member in contact tells its leader it cannot fire and found no firing position (backlog 0005): a member its
+/// team leader, a team leader the squad leader. The leader hears it after the relay time.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The one who cannot fire.</param>
+/// <param name="LeaderId">The leader it tells.</param>
+public sealed record CannotFireReported(double Time, string AgentId, string LeaderId) : SimEvent(Time, AgentId);
+
+/// <summary>A team leader asks the squad leader's permission to move its team to a firing position (backlog 0005).</summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The team leader.</param>
+/// <param name="Team">Its team.</param>
+public sealed record TeamMoveRequested(double Time, string AgentId, string Team) : SimEvent(Time, AgentId);
+
+/// <summary>
+/// The squad leader answers a team leader's <see cref="TeamMoveRequested"/> (backlog 0005): granted when no other team of
+/// the squad is moving and the squad has fire superiority.
+/// </summary>
+/// <param name="Time">Simulated time.</param>
+/// <param name="AgentId">The squad leader.</param>
+/// <param name="Team">The team.</param>
+/// <param name="Granted">True if the team may move.</param>
+public sealed record TeamMoveAnswered(double Time, string AgentId, string Team, bool Granted) : SimEvent(Time, AgentId);
+
+/// <summary>
 /// A new squad leader that did not hear its predecessor's movement order asked the platoon leader for it (backlog 0004,
 /// S2b).
 /// </summary>

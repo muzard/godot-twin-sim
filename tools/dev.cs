@@ -13,7 +13,9 @@
 //                     a .jsonl path only replays that log; --godot opens the replay in the Godot client
 //                     (with a .jsonl path, --scenario <name> names the map if the file name does not start with it);
 //                     ./dev replay st1-combat runs a built-in fire fight on st1 instead of a scenario
-//                     (./dev replay st1-ambush is a scenario file: a squad through the st1 corridor into an ambush)
+//                     (./dev replay st1-ambush is a scenario file: a squad through the st1 corridor into an ambush;
+//                     ./dev replay st1-patrol a built-in patrol: file, then wedge, then an ambush from the flank;
+//                     ./dev replay st1-hill the same patrol ambushed from a rise 125 m north of the route)
 //   ./dev smoke       run only the acceptance tests on real map data (Smoke test I), with test output
 //   ./dev docker-test run the core test suite in a clean Linux container and report the time (needs Docker)
 //   ./dev prep <cmd>  run a command in the map preprocessing container (Python + GDAL, needs Docker)

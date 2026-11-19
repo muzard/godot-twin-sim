@@ -42,6 +42,9 @@ public enum UnitActivity
     /// out of action (backlog 0004, S2a).
     /// </summary>
     WaitingForSquad,
+
+    /// <summary>A squad member in contact on its way to a firing position, its own or its team's (backlog 0005).</summary>
+    MovingToFiringPosition,
 }
 
 /// <summary>
@@ -214,6 +217,27 @@ public sealed class Unit
 
     /// <summary>Enemies the unit knows of, spotted or reported, with their last known position.</summary>
     internal SortedDictionary<string, Vec2> KnownEnemies { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The route to a firing position a squad member in contact is on its way to (backlog 0005), starting where it set
+    /// out; null when it is on none.
+    /// </summary>
+    internal List<Vec2>? FiringRoute { get; set; }
+
+    /// <summary>The next point of <see cref="FiringRoute"/>.</summary>
+    internal int FiringRouteNext { get; set; }
+
+    /// <summary>True while a squad member holds a firing position it moved to in contact: the squad does not pull it back.</summary>
+    internal bool HoldsFiringPosition { get; set; }
+
+    /// <summary>Since when a squad member in contact has been unable to fire at an enemy it should fire at; null if able.</summary>
+    internal double? CannotFireSince { get; set; }
+
+    /// <summary>
+    /// The picture (enemies known, fire area) in which the member last found no firing position and told its leader;
+    /// null if it has not. It does not report again until the picture changes (backlog 0005).
+    /// </summary>
+    internal (int Enemies, object? Area)? ReportedCannotFire { get; set; }
 
     /// <summary>Enemies the unit has reported or relayed: a member reports an enemy once.</summary>
     internal SortedSet<string> Reported { get; } = new(StringComparer.Ordinal);

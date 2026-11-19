@@ -154,8 +154,8 @@ public class SquadEdgeDeploymentTests
         sim.Unit("rj").Should().BeAt(B);
         var permit = Assert.Single(sim.Squad("r1").Permits);
         Assert.Equal(HardBoundary.ForestEdgeId, permit.BoundaryId);
-        // radius + the line's half-width: its farthest spot from the RJ, k2, five intervals right
-        Assert.Equal(PermitRadius + ((LineOrder.Length - 1 - LeaderInLine) * SpecSquad.IntervalMeters), permit.Radius, precision: 6);
+        // The squad-wide forest-edge permit (decided 2026-11-19): it covers the edge everywhere, for the rest of the order.
+        Assert.True(double.IsPositiveInfinity(permit.Radius), $"the forest-edge permit should cover the whole edge, radius was {permit.Radius}");
         foreach (var id in Members)
         {
             var violations = RouteAudit.Violations(world, corridor, sim.Trail(id), sim.Squad("r1").Permits);

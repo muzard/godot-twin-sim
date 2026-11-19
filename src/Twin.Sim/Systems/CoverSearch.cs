@@ -98,8 +98,11 @@ internal static class CoverSearch
         }
     }
 
-    /// <summary>The square grid around the agent and a breadth-first walk over it.</summary>
-    private sealed class Grid
+    /// <summary>
+    /// The square grid around the agent and a breadth-first walk over it. Leaving forest needs one of
+    /// <c>permits</c> (the drill has none; a squad member in contact carries its squad's, backlog 0005).
+    /// </summary>
+    internal sealed class Grid
     {
         private readonly IWorldQuery _world;
         private readonly Unit _agent;
@@ -109,9 +112,13 @@ internal static class CoverSearch
         private readonly int _half;
         private readonly int _width;
         private readonly int[] _parent;
+        private readonly IReadOnlyList<Corridors.CrossingPermit> _permits;
 
-        public Grid(IWorldQuery world, Unit agent, double spacing, double radius, IReadOnlyList<IReadOnlyList<Vec2>> boundaries)
+        public Grid(
+            IWorldQuery world, Unit agent, double spacing, double radius, IReadOnlyList<IReadOnlyList<Vec2>> boundaries,
+            IReadOnlyList<Corridors.CrossingPermit>? permits = null)
         {
+            _permits = permits ?? [];
             _world = world;
             _agent = agent;
             _spacing = spacing;
@@ -204,7 +211,8 @@ internal static class CoverSearch
             }
 
             // ADR 0009: leaving forest crosses a hard boundary, and the drill has no permit for it.
-            if (_world.ClassAt(a.X, a.Y) == TerrainClass.Forest && _world.ClassAt(b.X, b.Y) != TerrainClass.Forest)
+            if (_world.ClassAt(a.X, a.Y) == TerrainClass.Forest && _world.ClassAt(b.X, b.Y) != TerrainClass.Forest &&
+                !_permits.Any(p => p.Covers(Corridors.HardBoundary.ForestEdgeId, b)))
             {
                 return false;
             }

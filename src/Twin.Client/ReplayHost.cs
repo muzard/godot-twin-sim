@@ -250,6 +250,9 @@ public partial class ReplayHost : Node2D
         EdgeDeployed d => $"squad {d.SquadId} deployed at the forest edge",
         ContactReported c => $"contact: {c.AttackerId}",
         EnemyEstimateChanged x => $"squad {x.SquadId} estimate: {x.Fighters} enemies{(x.HeavyMachineGun ? ", heavy machine gun" : string.Empty)}",
+        CannotFireReported c => $"cannot fire: tells {c.LeaderId}",
+        TeamMoveRequested r => $"asks to move team {r.Team}",
+        TeamMoveAnswered a => $"team {a.Team} may move: {(a.Granted ? "yes" : "no")}",
         _ => e.GetType().Name,
     };
 

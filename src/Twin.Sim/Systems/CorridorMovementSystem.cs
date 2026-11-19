@@ -108,13 +108,21 @@ public sealed class CorridorMovementSystem : ISimSystem
             simulation.Log(new PermissionAnswered(now, unit.Id, boundary, leader.Answer));
             if (leader.Answer == LeaderAnswer.Grant)
             {
-                progress.Deployment = null; // a later forest edge on the way is deployed for afresh
+                // A later forest edge on the way is deployed for afresh, unless a squad-wide forest-edge permit covers it.
+                progress.Deployment = null;
                 progress.EdgeCrossing = null;
-                progress.Permits.Add(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters));
                 if (simulation.SquadOf(unit.Id) is { } squad && squad.LeaderId == unit.Id)
                 {
-                    // The permit covers the squad's formation (backlog 0004, S2b).
-                    squad.AddPermit(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters + progress.SquadHalfWidth));
+                    // The permit covers the squad's formation (backlog 0004, S2b); one to leave the forest covers every
+                    // forest edge of the order, so the leader carries the squad's version of it.
+                    var squadPermit = squad.AddPermit(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters + progress.SquadHalfWidth));
+                    progress.Permits.Add(boundary == HardBoundary.ForestEdgeId
+                        ? squadPermit
+                        : new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters));
+                }
+                else
+                {
+                    progress.Permits.Add(new CrossingPermit(boundary, progress.Request.At, leader.PermitRadiusMeters));
                 }
             }
             else

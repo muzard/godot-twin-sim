@@ -66,7 +66,7 @@ public sealed class SquadSystem : ISimSystem
             simulation.Log(new FormationChanged(now, leader.Id, squad.Id, formation.Formation));
         }
 
-        CarryOut(squad, leader, command);
+        CarryOut(simulation, squad, leader, command);
 
         foreach (var member in squad.Members)
         {
@@ -182,7 +182,7 @@ public sealed class SquadSystem : ISimSystem
 
             var unit = simulation.GetUnit(delivery.UnitId);
             simulation.Log(new CommandReceived(now, unit.Id, delivery.CommandId));
-            CarryOut(squad, unit, delivery.Command);
+            CarryOut(simulation, squad, unit, delivery.Command);
             foreach (var recipient in delivery.RelayTo)
             {
                 // Counted from when the team leader was due to act, so ticks never add up to extra delay.
@@ -199,7 +199,7 @@ public sealed class SquadSystem : ISimSystem
     /// starts on the next step (this system runs after <see cref="CombatStatusSystem"/>); the leader's, carried out when its
     /// order takes effect, starts on the same step.
     /// </summary>
-    private static void CarryOut(Squad squad, Unit unit, Order command)
+    private static void CarryOut(Simulation simulation, Squad squad, Unit unit, Order command)
     {
         switch (command)
         {
@@ -228,6 +228,10 @@ public sealed class SquadSystem : ISimSystem
                     squad.FireCommandDue = null; // a distribution due for a new enemy is called off too
                 }
 
+                break;
+            case MoveTeamToFiringPosition move when unit.Drill is null && move.Spots.TryGetValue(unit.Id, out var spot):
+                FiringPositionSystem.Head(simulation, unit, [unit.Position.Xy, spot]); // its spot in its team's line (backlog 0005)
+                unit.ReportedCannotFire = null;
                 break;
             case DeployAtForestEdge when squad.EdgeDeployment is { } line && ReferenceEquals(line.Command, command):
                 line.Acted.Add(unit.Id); // it moves to its spot in the open line (S2c)

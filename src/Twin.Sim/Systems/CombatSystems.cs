@@ -207,11 +207,11 @@ public sealed class FireSystem : ISimSystem
         !simulation.Config.Combat.Observation.IsOff && simulation.SquadOf(unit.Id) is { } squad &&
         (unit.KnownEnemies.Count > 0 || squad.IsHalted);
 
-    private static bool IsMachineGunner(Simulation simulation, Unit unit) =>
+    internal static bool IsMachineGunner(Simulation simulation, Unit unit) =>
         simulation.SquadOf(unit.Id) is { } squad && squad.Member(unit.Id).Role == Squads.SquadRole.MachineGunner;
 
     /// <summary>A known enemy the machine gun can put suppressive fire on: in action, in range, in sight, its sector clear.</summary>
-    private static bool Suppressible(Simulation simulation, Unit shooter, Unit target) =>
+    internal static bool Suppressible(Simulation simulation, Unit shooter, Unit target) =>
         target.Combatant is { } other && other.Side != shooter.Combatant!.Side && target.Health != Health.OutOfAction &&
         shooter.EyePosition.DistanceTo(target.AimPoint) <= shooter.Combatant.Weapon.MaxRangeMeters &&
         CombatQueries.SectorClear(simulation, shooter, shooter.Position.Xy, target.Position.Xy) &&
