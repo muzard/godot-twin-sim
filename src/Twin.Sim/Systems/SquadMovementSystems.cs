@@ -244,7 +244,7 @@ public sealed class SquadFollowSystem : ISimSystem
         {
             var unit = simulation.GetUnit(member.UnitId);
             if (member.UnitId != leaderId && squad.IsFollowing(member.UnitId) && unit.CurrentOrder is null &&
-                unit.Drill is null && !unit.IsImmobilized)
+                unit.Drill is null && !unit.IsImmobilized && !unit.HoldsFiringPosition)
             {
                 unit.Velocity = Vec3.Zero;
                 CombatQueries.SetActivity(unit, UnitActivity.Idle);
@@ -275,7 +275,8 @@ public sealed class SquadFollowSystem : ISimSystem
 
     private static void Follow(Simulation simulation, Squad squad, Unit member, Vec2 slot, double dt)
     {
-        if (member.IsImmobilized || member.Drill is not null || member.CurrentOrder is not null || member.Profile is not { } profile)
+        if (member.IsImmobilized || member.Drill is not null || member.CurrentOrder is not null || member.HoldsFiringPosition ||
+            member.Profile is not { } profile)
         {
             return;
         }

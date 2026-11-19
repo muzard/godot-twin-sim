@@ -228,6 +228,16 @@ public static class EventLog
             case SquadResumed resumed:
                 w.WriteString("squad", resumed.SquadId);
                 break;
+            case CannotFireReported cannotFire:
+                w.WriteString("leader", cannotFire.LeaderId);
+                break;
+            case TeamMoveRequested request:
+                w.WriteString("team", request.Team);
+                break;
+            case TeamMoveAnswered answer:
+                w.WriteString("team", answer.Team);
+                w.WriteBoolean("granted", answer.Granted);
+                break;
             default:
                 throw new ArgumentException($"Unknown event type {e.GetType().Name}.", nameof(e));
         }
@@ -292,6 +302,9 @@ public static class EventLog
             nameof(SpotReceived) => new SpotReceived(time, agent, Text(j, "reporter"), Text(j, "enemy"), Point2(j.GetProperty("enemyPosition"))),
             nameof(SquadHalted) => new SquadHalted(time, agent, Text(j, "squad"), Text(j, "enemy")),
             nameof(SquadResumed) => new SquadResumed(time, agent, Text(j, "squad")),
+            nameof(CannotFireReported) => new CannotFireReported(time, agent, Text(j, "leader")),
+            nameof(TeamMoveRequested) => new TeamMoveRequested(time, agent, Text(j, "team")),
+            nameof(TeamMoveAnswered) => new TeamMoveAnswered(time, agent, Text(j, "team"), j.GetProperty("granted").GetBoolean()),
             _ => throw new InvalidDataException(string.Create(CultureInfo.InvariantCulture, $"Unknown event type '{type}'.")),
         };
     }

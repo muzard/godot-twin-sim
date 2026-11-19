@@ -132,6 +132,9 @@ public sealed record SquadDoctrine(
     /// </summary>
     public double ForwardCrossingDegrees { get; init; } = 45;
 
+    /// <summary>How members in contact find firing positions, on their own and by team (backlog 0005).</summary>
+    public FiringPositionRules FiringPositions { get; init; } = FiringPositionRules.Default;
+
     /// <summary>
     /// True if a fighter with this experience acts on the squad leader's command directly; otherwise it waits for its
     /// team leader to pass the command on.

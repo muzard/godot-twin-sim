@@ -812,6 +812,10 @@ member's or the leader's route may still cut out of the forest sideways and back
 (the tests put bog beside the bands); (c) a slot in water or a building is moved inward to the first standable point
 by the older S2b code, which may lie outside the forest.
 
+#### S5c: a member that cannot fire moves to a firing position (moved, 2026-11-19)
+Moved to its own ticket, [0005 (firing positions in contact)](0005-firing-positions-in-contact.md): the fighter, the
+team leader and the squad leader each have a part in it.
+
 #### S5b spec decisions (2026-11-19; tests reviewed and implemented)
 Decided with the product owner: before the squad leader distributes fire, members fire at the first enemy they see;
 after it, into the fire area (tulialue) the leader commands. A fire area is a direction sector from each fighter, and

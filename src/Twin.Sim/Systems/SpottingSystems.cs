@@ -447,7 +447,13 @@ internal static class SquadAlerts
             var unit = simulation.GetUnit(member.UnitId);
             unit.FireArea = null;
             unit.CeasedFire = false;
+            unit.FiringRoute = null; // and nobody holds a firing position any more (backlog 0005)
+            unit.HoldsFiringPosition = false;
+            unit.CannotFireSince = null;
+            unit.ReportedCannotFire = null;
         }
+
+        squad.TeamFiring.Clear();
     }
 
     /// <summary>The member stops where it is and crouches (unless the drill under fire decides its posture).</summary>

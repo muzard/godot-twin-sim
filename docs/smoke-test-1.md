@@ -102,8 +102,9 @@ scenario needs `--scenario <name>`. The camera starts framed on where the agents
 `./dev replay st1-ambush` (add `--godot` to watch it) runs the scenario `scenarios/st1-ambush` (backlog 0004): the
 reference squad of nine, in a wedge, starts in the forest on the corridor's second leg and is ordered to B; three red
 fighters with a machine gun lie prone in the copse across the field, watching it. Both sides fire freely at enemies they
-have spotted. It shows what the simulation does today: spotting, spot reports, the squad halting, and each fighter's
-drill under fire; the squad leader does not yet direct fire or manoeuvre (backlog 0004 S5b, S6), so the squad stays
+have spotted. It shows what the simulation does today: spotting, spot reports, the squad halting, each fighter's drill
+under fire, the squad leader distributing fire (backlog 0004 S5b), and members that cannot fire moving to firing
+positions, on their own or by team (backlog 0005); the squad does not yet manoeuvre (0004 S6), so it fights from about
 where it halted. A squad scenario runs until its leader arrives or is blocked, one side has nobody in action, or nobody
 has fired for 120 s after the first shot; the log goes to `replays/st1-ambush-Grant.jsonl`.
 

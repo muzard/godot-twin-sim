@@ -216,6 +216,9 @@ public sealed class Squad
     /// <summary>Commands on their way to members, in the order they were scheduled.</summary>
     internal List<Delivery> Deliveries { get; } = [];
 
+    /// <summary>Each team's firing-position decisions in contact, by team name (backlog 0005).</summary>
+    internal SortedDictionary<string, TeamFiringState> TeamFiring { get; } = new(StringComparer.Ordinal);
+
     /// <summary>A member's role and team. (Its experience is its own as a fighter: <see cref="Combat.Combatant.Experience"/>.)</summary>
     /// <exception cref="KeyNotFoundException">The agent is not in this squad.</exception>
     public SquadMember Member(string unitId) =>
