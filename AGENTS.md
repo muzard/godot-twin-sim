@@ -24,6 +24,7 @@ The world model is 2.5D: one ground height per map position (ADR 0004).
 | Watch that replay on the map in Godot | `./dev replay st1 --godot` |
 | Watch a fire fight (built-in demo) | `./dev replay st1-combat --godot` |
 | Watch a squad run into an ambush (scenario file) | `./dev replay st1-ambush --godot` |
+| Watch a squad patrol: file, then wedge, then an ambush (built-in demo) | `./dev replay st1-patrol --godot` |
 | Core tests in Docker, timed | `./dev docker-test` |
 | Map preprocessing toolbox (GDAL) | `./dev prep <command>` (see `prep/README.md`) |
 

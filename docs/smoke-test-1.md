@@ -107,6 +107,13 @@ drill under fire; the squad leader does not yet direct fire or manoeuvre (backlo
 where it halted. A squad scenario runs until its leader arrives or is blocked, one side has nobody in action, or nobody
 has fired for 120 s after the first shot; the log goes to `replays/st1-ambush-Grant.jsonl`.
 
+`./dev replay st1-patrol` (add `--godot` to watch it) runs a built-in patrol (`src/Twin.Headless/PatrolDemo.cs`): the
+reference squad walks east across the big field in the middle of st1 in file, crossing the road; past x = 480 m its leader
+commands a wedge; past x = 560 m three red fighters in the copse on the field's north side, about 20 m from the route,
+open fire on its flank. The scenario format cannot yet change formation on the way, so the run is scripted. There is no
+concealment model yet (prone fighters at a forest edge are spotted across the open field from far off), so red is placed
+only when it opens fire. It writes `replays/st1-patrol.jsonl`.
+
 The viewer draws agents as dots in their side's colour (blue, red; grey for an agent that is not a fighter), smaller the
 lower the posture, ringed orange when pinned, red when wounded and yellow when suppressed, grey with a cross when out of
 action; a squad leader has a second ring and its squad's id and formation (or `halted`) next to it. Each agent's watch direction is a short line, its observation sectors translucent wedges, and a small mark above

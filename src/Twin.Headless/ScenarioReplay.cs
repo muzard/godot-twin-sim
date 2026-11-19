@@ -20,6 +20,7 @@ internal static class ScenarioReplay
         "Usage: ./dev replay <scenario | log.jsonl> [--answer Grant|Deny|NoAnswer] [--every 60] [--out file.jsonl] [--max-seconds 7200]\n" +
         "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
         "  st1-combat runs a built-in fire fight on st1 (two fire teams of three) to replays/st1-combat.jsonl.\n" +
+        "  st1-patrol runs a built-in patrol on st1 (file, then wedge, then an ambush from the flank) to replays/st1-patrol.jsonl.\n" +
         "  A squad scenario (e.g. st1-ambush) runs until its leader arrives or is blocked, one side has nobody in action, or nobody\n" +
         "  has fired for 120 s after the first shot.\n" +
         "  Exit code 2: the run was not over (agent idle or blocked, fight decided) when --max-seconds ran out.";
@@ -64,6 +65,21 @@ internal static class ScenarioReplay
             var end = events.Count > 0 ? events[^1].Time : 0.0;
             Print(events, end, every);
             return 0;
+        }
+
+        if (target == PatrolDemo.Name)
+        {
+            if (options.ContainsKey("--answer"))
+            {
+                Console.WriteLine("--answer does not apply to the patrol demo: its platoon leader always grants.");
+                return 1;
+            }
+
+            var patrol = PatrolDemo.Create("scenarios");
+            var end = new SquadRunEnd(patrol);
+            return RunAndReplay(
+                patrol, end.IsOver, PatrolDemo.Name, options.GetValueOrDefault("--out") ?? Path.Combine("replays", $"{PatrolDemo.Name}.jsonl"),
+                end.Outcome, every, maxSeconds, PatrolDemo.Script(patrol));
         }
 
         if (target == CombatDemo.Name)
@@ -115,10 +131,12 @@ internal static class ScenarioReplay
     }
 
     private static int RunAndReplay(
-        Simulation simulation, Func<bool> isDone, string title, string outFile, Func<string> outcome, double every, double maxSeconds)
+        Simulation simulation, Func<bool> isDone, string title, string outFile, Func<string> outcome, double every, double maxSeconds,
+        Action? beforeStep = null)
     {
         do
         {
+            beforeStep?.Invoke();
             simulation.Step();
         }
         while (!isDone() && simulation.TimeSeconds < maxSeconds);
