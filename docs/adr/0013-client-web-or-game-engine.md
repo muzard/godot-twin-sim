@@ -16,7 +16,8 @@ on purpose.
   circles, sector polygons and text for the corridor, cliffs, routes, trails, shots, spotting lines, known
   enemies and agents. That is a few dozen agents and a few hundred draw calls.
 - `ReplayHost` adds a camera (zoom and pan), a timeline slider, labels and keyboard playback.
-- `SimulationHost` runs a simulation in the same process and turns mouse clicks into orders.
+- `SimulationHost` runs a simulation in the same process and turns mouse clicks into orders; `UnitLayer` draws
+  its units, destinations and selection, also in `_Draw()`.
 
 None of this needs a game engine: the HTML canvas has the same primitives (`lineTo`, `arc`, `fill`,
 `setLineDash`, `fillText`). What the client uses that is really Godot's own is narrow: one process and one
@@ -59,7 +60,7 @@ This objection comes up against the web option, and it is fair in part.
   - corridors and boundaries, forest-edge permits;
   - squad formations and leadership;
   - spotting, fire distribution and suppression;
-  - firing positions (0005).
+  - firing positions (backlog 0005).
 - We write them ourselves wherever they live. Moved into Godot, they would sit in Godot nodes instead of a plain
   library.
 - No engine choice removes this work.
@@ -134,7 +135,8 @@ Benefits that matter for a digital twin of an operating environment, roughly by 
      boundaries, set rules of engagement, preview the terrain.
    - The output is still the scenario files the simulation reads.
 9. **One language and shared types, in process.**
-   - The client links `Twin.Sim`, calls queries such as `FindBestFiringPosition` and reuses `EventReplay`.
+   - The client links `Twin.Sim`, reads its state (`Units`), issues orders (`Issue`) and reuses `EventReplay`; it
+     could call any query, such as `FindBestFiringPosition`, directly.
    - There is no API to design or keep in sync, and live mode needs no server.
    - This is the benefit we use today. It disappears if the simulation moves to another language.
 10. **Networked multi-user sessions.** Godot's high-level networking can connect several trainees' clients to
@@ -163,12 +165,12 @@ reason to choose an engine for drawing units.
 
 **Where it does pay off: many discrete objects that are not agents.**
 1. **Trees and vegetation in a 3D view.**
-   - The forest edge is a hard boundary (ADR 0009), and concealment in forest scores firing positions (0005).
+   - The forest edge is a hard boundary (ADR 0009), and concealment in forest scores firing positions (backlog 0005).
    - Showing the forest as trees rather than a green fill makes both visible.
    - One hectare holds hundreds of trees and a map holds square kilometres of forest: hundreds of thousands of
      instances. This is the main case, and it only arises with 3D.
 2. **Inspecting the search.**
-   - The cover search (0003) and the firing-position search (0005) score thousands of 2 m grid points per
+   - The cover search (backlog 0003) and the firing-position search (backlog 0005) score thousands of 2 m grid points per
      decision.
    - We can draw every candidate as a marker coloured by score, with the chosen one highlighted, and step
      through decisions in the replay.
@@ -277,7 +279,8 @@ Proposed, for the team to confirm or change:
   checking against the Godot version in use before it can be an option.
 - **Godot client with an embedded web view** for the UI screens. Mixes two UI stacks in one program; brittle
   and rarely worth it.
-- **Another engine** (Unity, Unreal, Bevy). ADR 0007's reasons still hold: licence, weight, editor maturity.
+- **Another engine** (Unity, Unreal, Bevy). ADR 0007's reasons against them still hold: Unity only for DOTS-scale unit counts
+  or console plans, Unreal a poor fit for 2D and UI-heavy work, Bevy's editor and UI immature.
 - **Move the simulation into the engine.**
   - Rejected in ADR 0002 and still not worth it.
   - The engine would replace little of our code: basic A*, a sight-line raycast, the game loop.

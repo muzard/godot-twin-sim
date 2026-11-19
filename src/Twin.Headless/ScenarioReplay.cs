@@ -21,7 +21,7 @@ internal static class ScenarioReplay
         "  <scenario> is a directory or a name under scenarios/ (e.g. st1). The log goes to replays/<scenario>-<answer>.jsonl.\n" +
         "  st1-combat runs a built-in fire fight on st1 (two fire teams of three) to replays/st1-combat.jsonl.\n" +
         "  st1-patrol runs a built-in patrol on st1 (file, then wedge, then an ambush from the flank) to replays/st1-patrol.jsonl;\n" +
-        "  st1-hill the same patrol ambushed from the foot of the hill about 90 m north of the route.\n" +
+        "  st1-hill the same patrol ambushed from the south edge of a wooded rise about 125 m off the route.\n" +
         "  A squad scenario (e.g. st1-ambush) runs until its leader arrives or is blocked, one side has nobody in action, or nobody\n" +
         "  has fired for 120 s after the first shot.\n" +
         "  Exit code 2: the run was not over (agent idle or blocked, fight decided) when --max-seconds ran out.";

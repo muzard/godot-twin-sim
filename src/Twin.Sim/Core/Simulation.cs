@@ -647,6 +647,17 @@ public sealed class Simulation
             hash.Add(unit.FireArea is { } area ? area.Centre.X : double.NaN);
             hash.Add(unit.FireArea is { } areaY ? areaY.Centre.Y : double.NaN);
             hash.Add(unit.FireArea?.WidthDegrees ?? -1);
+            hash.Add(unit.FiringRoute?.Count ?? -1);
+            foreach (var point in unit.FiringRoute ?? [])
+            {
+                hash.Add(point.X);
+                hash.Add(point.Y);
+            }
+
+            hash.Add(unit.FiringRouteNext);
+            hash.Add(unit.HoldsFiringPosition ? 1 : 0);
+            hash.Add(unit.CannotFireSince ?? -1);
+            hash.Add(unit.ReportedCannotFire is { } reported ? reported.Enemies : -1);
         }
 
         foreach (var squad in _squads.Values)
@@ -685,6 +696,16 @@ public sealed class Simulation
             hash.Add(squad.Front is { } frontY ? frontY.Centre.Y : double.NaN);
             hash.Add(squad.Front?.WidthDegrees ?? -1);
             hash.Add(squad.FireCommandDue ?? -1);
+            foreach (var (team, firing) in squad.TeamFiring)
+            {
+                hash.Add(team);
+                hash.Add(firing.DecideAt ?? -1);
+                hash.Add(firing.AnswerAt ?? -1);
+                hash.Add(firing.MoveAt ?? -1);
+                hash.Add(firing.SquadLeaderSearchAt ?? -1);
+                hash.Add(firing.Move?.ToString() ?? "none");
+                hash.Add(firing.Exhausted ? 1 : 0);
+            }
 
             foreach (var enemyId in squad.HaltedFor)
             {
