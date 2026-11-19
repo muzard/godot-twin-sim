@@ -51,6 +51,54 @@ What an engine does speed up is our *work on* the simulation. When the scored ca
 or a hundred runs' trails are visible on the map, it is much faster to see why a rule chose what it chose and to
 calibrate it than by reading the event log.
 
+### "We would be writing our own engine"
+This objection comes up against the web option, and it is fair in part.
+
+**The simulation is not a game engine, in any option.**
+- These are rules no engine ships with:
+  - corridors and boundaries, forest-edge permits;
+  - squad formations and leadership;
+  - spotting, fire distribution and suppression;
+  - firing positions (0005).
+- We write them ourselves wherever they live. Moved into Godot, they would sit in Godot nodes instead of a plain
+  library.
+- No engine choice removes this work.
+
+**A 2D web client is not an engine either.**
+- It uses map and rendering libraries (MapLibre, deck.gl, three.js) the way the Godot client uses Godot.
+- The current Godot client, the thing a web client would replace, is about 900 lines.
+
+**Where the objection holds.**
+- A 3D terrain view, effects, positional audio, VR or a training client built on the web would mean assembling
+  much of what an engine already integrates: cameras, level of detail, instancing, picking, audio, input.
+- That is why the draft decision sends exactly those uses to Godot.
+
+### Moving the simulation into the engine
+Could we gain by moving the simulation into Godot, as ADR 0002 rejected? What it would replace is small:
+
+| Godot feature | Would replace | But |
+|---|---|---|
+| A* (`AStarGrid2D`) | Part of our path search | Corridors, permits, cliffs and slope limits stay our own logic |
+| Navigation meshes and avoidance | Little | Determinism not guaranteed; avoidance runs in parallel |
+| Physics raycasts | The basic sight-line test | Hit or miss only: vegetation, eye heights per pose and partial cover stay ours |
+| Rigid-body physics | Nothing we need | Infantry needs no rigid bodies, and results are not guaranteed identical across platforms |
+| Game loop, timing, scene tree | A few lines of `Simulation` | — |
+
+What it would cost is what makes the simulation valuable:
+- **Fast tests.** The tests now run in seconds with no Godot install. Inside the engine they would need the Godot
+  runtime.
+- **Determinism (ADR 0005).** Replays and the final state hash depend on it.
+- **Cheap batch runs.** Many seeds would run through headless Godot processes instead of a plain library.
+- **Freedom to choose the simulation's language.**
+
+**The one case where an engine-style library would help the simulation.**
+- If the world model ever goes beyond 2.5D (ADR 0004), sight and movement against real 3D geometry become hard:
+  building interiors, storeys, bridges.
+- Ready-made collision and ray queries would then be worth having.
+- Even then the right move is a standalone library used from the simulation (for example Jolt directly), not the
+  engine, so determinism and testability stay.
+- That would be its own ADR, superseding parts of ADR 0004.
+
 ### What a game engine gives (Godot here)
 Benefits that matter for a digital twin of an operating environment, roughly by how likely we are to need them:
 
@@ -230,6 +278,17 @@ Proposed, for the team to confirm or change:
 - **Godot client with an embedded web view** for the UI screens. Mixes two UI stacks in one program; brittle
   and rarely worth it.
 - **Another engine** (Unity, Unreal, Bevy). ADR 0007's reasons still hold: licence, weight, editor maturity.
+- **Move the simulation into the engine.**
+  - Rejected in ADR 0002 and still not worth it.
+  - The engine would replace little of our code: basic A*, a sight-line raycast, the game loop.
+  - We would lose fast engine-free tests, determinism, cheap batch runs and the choice of the simulation's language.
+  - See "Moving the simulation into the engine" above.
+- **Write our own engine.**
+  - Nobody proposes it.
+  - The simulation is domain rules, not an engine.
+  - A 2D web client is built on libraries.
+  - Only a 3D, effects or training client on the web would drift towards one, and the draft sends those uses to
+    Godot.
 
 ## Consequences
 - **If a web client is added:**
