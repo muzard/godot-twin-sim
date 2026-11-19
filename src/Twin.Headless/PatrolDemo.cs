@@ -22,15 +22,41 @@ namespace Twin.Headless;
 /// fire. From then on the simulation decides: spotting and spot reports, the squad halting, each fighter's drill under
 /// fire, and the leader distributing the squad's fire.
 /// </para>
+/// <para>
+/// <c>./dev replay st1-hill</c> is the same patrol with the ambush farther off: red lies at the south edge of the wooded rise
+/// north-west of the field, about 125 m from the route and 8 m above it, where it can see the route between x = 440 and
+/// 520 m (from lower ground nearer the route a low swell in the field hides it). The leader commands the wedge past
+/// x = 450 m, after the road, and red opens fire when it is past x = 520 m.
+/// </para>
 /// </summary>
 internal static class PatrolDemo
 {
     /// <summary>Name of the demo for <c>./dev replay</c>. The part before the last '-' names its map in <c>scenarios/</c>.</summary>
     public const string Name = "st1-patrol";
 
+    /// <summary>Name of the variant with the ambush from the hill.</summary>
+    public const string HillName = "st1-hill";
+
     private const string SquadId = "blue";
-    private const double WedgeAtX = 480;
-    private const double AmbushAtX = 560;
+
+    /// <summary>One version of the patrol: where the leader commands the wedge, where red opens fire, and where red lies.</summary>
+    internal sealed record Variant(string Name, double WedgeAtX, double AmbushAtX, IReadOnlyList<(string Id, Vec2 At, bool MachineGun)> Red);
+
+    /// <summary>The ambush from the copse 20 m from the route.</summary>
+    public static Variant Copse { get; } = new(Name, 480, 560,
+    [
+        ("red-1", new Vec2(540, 592), false),
+        ("red-mg", new Vec2(548, 596), true),
+        ("red-2", new Vec2(532, 600), false),
+    ]);
+
+    /// <summary>The ambush from the wooded rise about 125 m north of the route.</summary>
+    public static Variant Hill { get; } = new(HillName, 450, 520,
+    [
+        ("red-1", new Vec2(448, 698), false),
+        ("red-mg", new Vec2(456, 698), true),
+        ("red-2", new Vec2(464, 698), false),
+    ]);
 
     /// <summary>Machine gun 7.62 with backlog 0003's values (open, to be calibrated).</summary>
     private static WeaponProfile MachineGun => WeaponProfile.MachineGun;
@@ -47,14 +73,6 @@ internal static class PatrolDemo
         ("vj", SquadRole.SecondInCommand, "support", Experience.Regular),
         ("kk", SquadRole.MachineGunner, "support", Experience.Conscript),
         ("t1", SquadRole.Rifleman, "support", Experience.Conscript),
-    ];
-
-    // Red in local metres on st1: inside the copse on the field's north side, a few metres in from its south edge.
-    private static readonly (string Id, Vec2 At, bool MachineGun)[] Red =
-    [
-        ("red-1", new Vec2(540, 592), false),
-        ("red-mg", new Vec2(548, 596), true),
-        ("red-2", new Vec2(532, 600), false),
     ];
 
     /// <summary>The squad's corridor: east along the field, 80 m wide.</summary>
@@ -94,26 +112,26 @@ internal static class PatrolDemo
     }
 
     /// <summary>
-    /// The script, run before every step: the wedge past <see cref="WedgeAtX"/>; at <see cref="AmbushAtX"/> red is placed in
-    /// the copse, and from then on each red fighter without a target fires at the nearest member of the squad it has spotted.
+    /// The script, run before every step: the wedge past the variant's <c>WedgeAtX</c>; at its <c>AmbushAtX</c> red is placed,
+    /// and from then on each red fighter without a target fires at the nearest member of the squad it has spotted.
     /// </summary>
-    public static Action Script(Simulation simulation)
+    public static Action Script(Simulation simulation, Variant variant)
     {
         var wedge = false;
         var ambush = false;
         return () =>
         {
             var leader = simulation.Squads.First().LeaderId is { } id ? simulation.GetUnit(id) : null;
-            if (!wedge && leader is not null && leader.Position.X >= WedgeAtX)
+            if (!wedge && leader is not null && leader.Position.X >= variant.WedgeAtX)
             {
                 wedge = true;
                 simulation.Issue(leader.Id, new SetSquadFormation(SquadFormation.Wedge));
             }
 
-            if (!ambush && leader is not null && leader.Position.X >= AmbushAtX)
+            if (!ambush && leader is not null && leader.Position.X >= variant.AmbushAtX)
             {
                 ambush = true;
-                foreach (var (redId, at, machineGun) in Red)
+                foreach (var (redId, at, machineGun) in variant.Red)
                 {
                     simulation.AddUnit(redId, at, MovementProfile.Infantry,
                         new Combatant(Side.Red, RulesOfEngagement.HoldFire, machineGun ? MachineGun : WeaponProfile.Rifle, "red"));
@@ -127,7 +145,7 @@ internal static class PatrolDemo
                 return;
             }
 
-            foreach (var (redId, _, _) in Red)
+            foreach (var (redId, _, _) in variant.Red)
             {
                 var red = simulation.GetUnit(redId);
                 if (red.Health == Health.OutOfAction || red.CurrentOrder is FireAt)

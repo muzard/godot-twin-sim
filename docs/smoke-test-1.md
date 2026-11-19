@@ -112,7 +112,9 @@ reference squad walks east across the big field in the middle of st1 in file, cr
 commands a wedge; past x = 560 m three red fighters in the copse on the field's north side, about 20 m from the route,
 open fire on its flank. The scenario format cannot yet change formation on the way, so the run is scripted. There is no
 concealment model yet (prone fighters at a forest edge are spotted across the open field from far off), so red is placed
-only when it opens fire. It writes `replays/st1-patrol.jsonl`.
+only when it opens fire. It writes `replays/st1-patrol.jsonl`. `./dev replay st1-hill` is the same patrol ambushed from
+the south edge of the wooded rise north-west of the field, about 125 m from the route and 8 m above it (from lower ground
+nearer the route a low swell in the field hides the route); the wedge comes past x = 450 m, the fire past x = 520 m.
 
 The viewer draws agents as dots in their side's colour (blue, red; grey for an agent that is not a fighter), smaller the
 lower the posture, ringed orange when pinned, red when wounded and yellow when suppressed, grey with a cross when out of

@@ -749,6 +749,13 @@ S5a is delivered in two parts. **S5a1: spotting** (observation, watch sectors, t
 below. **S5a2:** the rest of S5a (UF1, UF5–UF7, WS3: contact by fire up the chain, the enemy estimate, suppression
 slows command, the drill conflicts), built on S5a1's reports.
 
+#### Squad-wide forest-edge permit (decided 2026-11-19; to be specified)
+Decided with the product owner after the st1 patrol demo, where the wedge's arms leaving the tree clumps along the road
+asked for permission again and again: **once the squad has a permit to leave the forest, it covers every member's every
+forest-edge crossing for the rest of that order, anywhere in the corridor.** Drawn boundaries (a road, for example) keep
+S2b's rule (radius plus half-width around the requested point). Not yet specified or implemented (it needs the spec
+phase); until then the patrol demos show the repeated requests.
+
 #### S5b spec decisions (2026-11-19; tests reviewed and implemented)
 Decided with the product owner: before the squad leader distributes fire, members fire at the first enemy they see;
 after it, into the fire area (tulialue) the leader commands. A fire area is a direction sector from each fighter, and
